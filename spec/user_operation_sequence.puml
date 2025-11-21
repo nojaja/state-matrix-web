@@ -1,0 +1,55 @@
+@startuml
+' 状態整理マトリクス操作フロー (パターン1/パターン2)
+
+autonumber
+actor "パターン1ユーザー\n(業務横断担当)" as Expert
+actor "パターン2ユーザー\n(各部署担当)" as Local
+participant "Webアプリ" as App
+participant "*Types管理" as Types
+participant "Case管理" as Cases
+participant "分析・分割エンジン" as Analysis
+
+== パターン1: 直接型編集 ==
+Expert -> App : SSO 認証 / ログイン
+App -> Types : 型一覧 + カテゴリメタ取得
+Types --> App : 現行 `*Types` + 参照状況
+Expert -> App : 型の追加/更新/削除 指示
+App -> Types : `*Types` CRUD 実行
+Types --> App : 更新結果 (ID, 監査情報)
+Expert -> App : 重複候補を選択し名寄せ要求
+App -> Types : Merge API 呼び出し (統合先/統合元)
+Types -> Types : 参照再付替 & 監査記録
+Types --> App : 結果 (成功/警告)
+App --> Expert : 完了通知 + 影響サマリ
+
+== パターン2: 案件起点入力 ==
+Local -> App : SSO 認証 / ログイン
+App -> Cases : 自ユーザーの案件一覧取得
+Cases --> App : 担当案件/ドラフト案件
+Local -> App : 新規 Case 登録
+App -> Cases : Case 作成 + Owner 設定
+Cases --> App : CaseID 返却
+Local -> App : CaseJobTypes を選択/追加
+App -> Types : 対応 JobTypes/ActionTriggerTypes 取得
+Types --> App : マスタ候補 & 未定義警告
+Local -> App : ActionTrigger 入力 (IN/OUT)
+App -> Cases : CaseActionTriggers 保存
+App -> Types : 未定義 `*Types` のドラフト登録 (必要時)
+Types --> App : ドラフトID 返却
+Local -> App : 成果物 (CaseArtifacts) を紐付け
+App -> Cases : CaseArtifacts / CausalRelations 保存
+
+== パターン2: 分割と分析 ==
+App -> Analysis : CaseActionTriggers の差分解析要求
+Analysis -> Cases : 入力データ取得
+Cases --> Analysis : IN/OUT/Actor/Timming 明細
+Analysis --> App : 分割候補 (理由付き)
+App --> Local : 分割候補提示 + 適用UI
+Local -> App : 承認/再編集
+App -> Analysis : 分割確定リクエスト
+Analysis -> Cases : ActionTrigger 複製 & 再配分
+Cases --> Analysis : 更新結果
+Analysis --> App : 完了 (状態/ログ)
+App --> Local : 分割完了通知
+
+@enduml
