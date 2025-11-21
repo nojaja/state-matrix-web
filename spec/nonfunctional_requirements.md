@@ -10,7 +10,7 @@
 
 ## 2. システムコンテキスト
 - クライアント: Vue.js 3 (Composition API) + TypeScript による SPA。ES Modules 構成。
-- サーバ: Node.js 22.21.0 (ESM) 上の REST API + WebSocket Gateway。
+- サーバ: Node.js 22.21.0 (ESM) 上の JSON-RPC 2.0 API + WebSocket Gateway。HTTP(S) 経由の RPC と双方向通知を提供。
 - 認証: OAuth/OIDC (hydra または GitLab)。JWT 署名を検証して RBAC/ABAC を適用。
 - データ: 状態整理マトリクス関連データを PostgreSQL で永続化。
 - インフラ: 開発/検証は docker-compose、本番は Kubernetes 等を想定。
@@ -20,6 +20,8 @@
 - ランタイム: Node.js 22.21.0。CommonJS 非許容、ESM のみ。
 - ビルド: Webpack 5.99.8 (本番) + Vite dev server。libraryTarget は `umd`。`npm run build` が docs/ を生成。
 - フロント: Vue.js 3 SFC、Pinia ストア、Vue Router。SSR 不要。
+- API: JSON-RPC 2.0 over HTTPS/WebSocket。メソッド名は `domain.usecase` 命名、バッチ/通知をサポートし、Schema (Zod 等) で検証。
+- MCP: JSON-RPC 実装の一部を Model Context Protocol サーバとして公開し、read-only ユースケースを外部ツールに提供。
 - パッケージ管理: npm 10.8.2。`npx` 利用可 (例: `npx prisma migrate`)。package-lock.json 必須。
 - ログ: pino など JSON logger。CLI 以外で `log4js` を使わない。
 
@@ -96,3 +98,42 @@
 - WebSocket 多接続でのリソース逼迫リスク。心拍監視と idle timeout を実装。
 - TypeScript + Vue + Node の複合ビルドは時間増大の恐れ。ビルドキャッシュ (turbo 等) を検討。
 - 状態遷移図レンダリングは外部ツール依存のため、可視化要件変更時は別途調整が必要。
+
+## 16. フォルダ構成 (クリーンアーキテクチャ)
+- 画面 (SPA) と API/WebSocket サーバーは物理的に別プロジェクトとして管理し、共通ロジックは共有パッケージに切り出す。
+
+```
+state-matrix-web/
+├── apps/
+│   ├── web-frontend/          # Vue SPA プロジェクト (presentation/application 層)
+│   │   └── src/
+│   │       ├── presentation/  # Vue コンポーネント・ルータ・UI 状態
+│   │       ├── application/   # フロント用ユースケース (services, stores)
+│   │       └── infrastructure/# API クライアント, WebSocket adapter
+│   └── api-server/            # Node.js REST + WebSocket プロジェクト
+│       └── src/
+│           ├── domain/        # エンティティ, 値オブジェクト, ポリシー (純粋ロジック)
+│           ├── usecases/      # ドメインサービス/ユースケース (アプリケーション層)
+│           ├── interface/     # HTTP/WebSocket コントローラ, GraphQL resolver 等
+│           └── infrastructure/# DB, SSO, Queue, Logger adapter
+├── packages/
+│   ├── shared-domain/         # web/api 共有のドメイン型・バリデーション
+│   └── shared-ui-kit/         # UI 共通部品やデザインシステム (必要に応じて)
+├── configs/                   # docker-compose, k8s manifest, lint 設定
+└── docs/                      # ビルド成果物・仕様書 (spec/, README など)
+```
+
+- フロント/サーバ間の依存方向は shared パッケージ→アプリのみ (逆依存は禁止)。
+- 各層はインタフェース (port) を介して疎結合化し、infrastructure から domain/usecases を参照しない。
+- API プロジェクトは Clean Architecture 原則に従い、ユースケース層から interface/infrastructure を DI 経由で呼び出す。
+- ビルド/CI は `apps/web-frontend`, `apps/api-server`, `packages/*` を個別に扱い、変更検知により部分ビルドを実施する。
+
+## 17. JSON-RPC / MCP サーバ要件
+- API プロトコルは JSON-RPC 2.0 に準拠し、HTTP POST `/rpc` と WebSocket `wss://.../rpc` で同一仕様を提供する。
+- メソッド命名は `case.create`, `types.merge` などドメイン単位で名前空間化し、idempotent 操作は `method` + `params` で一意に判定できるようにする。
+- リクエスト/レスポンスは Zod 等でスキーマ検証し、`error.code` は JSON-RPC 既定 + 独自拡張 (例: 460 ValidationError, 550 DomainRuleViolation)。
+- RPC バッチは 10 件まで、通知 (id 省略) は監査ログへ INFO 記録し、優先度の低い更新に限定する。
+- WebSocket 接続では JSON-RPC 通知を利用してサーバ→クライアントのリアルタイムイベント (分析完了、分割候補更新 等) を配信する。
+- 一部 read-only メソッド (`types.list`, `cases.getSummary` など) は MCP サーバ (Model Context Protocol) として公開し、外部 LLM/ツールから安全に呼び出せるよう別トークン・スコープを設ける。
+- MCP エンドポイントは JSON-RPC 実装を再利用し、認可ポリシーでメソッドをホワイトリスト管理。監査ログには `channel=mcp` を付与する。
+- API/クライアント双方は Trace Context と RPC `id` をログに紐付け、トレースビューで JSON-RPC 呼び出しを識別できるようにする。
