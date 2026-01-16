@@ -1,0 +1,171 @@
+import { defineStore } from 'pinia';
+import { ActionTriggerRepository, CausalRelationRepository } from '../repositories';
+import type { ActionTriggerType, CausalRelationType } from '../types/models';
+import { generateUUID } from '../lib/uuid';
+
+/**
+ * 処理名: トリガーストア
+ *
+ * 処理概要: アクショントリガーとそれに紐づく因果関係の管理を行う Pinia ストア
+ *
+ * 実装理由: トリガーの作成/更新/削除と関連の永続化を一元化するため
+ */
+/**
+ * 処理名: トリガーストアエクスポート
+ *
+ * 処理概要: トリガーとその因果関係を管理する Pinia ストアをエクスポートする
+ *
+ * 実装理由: トリガー関連の状態管理と永続化操作を一元化するため
+ */
+export const useTriggerStore = defineStore('data-mgmt-system/trigger', {
+  /**
+   * ストア状態の初期値
+   * @returns 初期 state オブジェクト
+   */
+  state: () => ({
+    triggers: [] as ActionTriggerType[],
+    relations: [] as CausalRelationType[],
+    loading: false,
+    initialized: false
+  }),
+  getters: {
+    /**
+     * 指定トリガーIDに紐づく関係を取得
+     * @param state ストアの state
+     * @returns 指定トリガーに紐づく `CausalRelationType[]` を返す関数
+     */
+    getRelationsByTriggerId(state) {
+      return (id: string) => state.relations.filter(r => r.ActionTriggerTypeID === id);
+    }
+  },
+  actions: {
+    /**
+     * 処理名: 初期化
+     *
+     * 処理概要: トリガーと関連を読み込んでストアを初期化する
+     *
+     * 実装理由: 初回ロード時のセットアップを行うため
+     */
+    async init() {
+      if (this.initialized) return;
+      await this.fetchAll();
+      this.initialized = true;
+    },
+
+    /**
+     * 処理名: 全件取得
+     *
+     * 処理概要: トリガーと関連を並列で取得して状態を更新する
+     *
+     * 実装理由: UI へのデータ供給と整合性確保のため
+     */
+    async fetchAll() {
+      this.loading = true;
+      try {
+        const [t, r] = await Promise.all([
+          ActionTriggerRepository.getAll(),
+          CausalRelationRepository.getAll()
+        ]);
+        this.triggers = t;
+        this.relations = r;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    /**
+     * 処理名: トリガー追加
+     * @param triggerPartial トリガー本体の部分情報
+     * @param relationsPartial 付随する因果関係の配列
+     *
+     * 処理概要: トリガー本体と関連情報を作成して永続化する
+     *
+     * 実装理由: UI からの一括登録をサポートするため
+     */
+    async addTrigger(
+      triggerPartial: Omit<ActionTriggerType, 'ID' | 'CreateTimestamp' | 'LastUpdatedBy'>,
+      relationsPartial: Omit<CausalRelationType, 'ID' | 'ActionTriggerTypeID' | 'CreateTimestamp' | 'LastUpdatedBy'>[]
+    ) {
+      const now = new Date().toISOString();
+      const triggerId = generateUUID();
+
+      const newTrigger: ActionTriggerType = {
+        ID: triggerId,
+        CreateTimestamp: now,
+        LastUpdatedBy: 'User',
+        ...triggerPartial
+      };
+
+      await ActionTriggerRepository.save(newTrigger);
+
+      for (const rel of relationsPartial) {
+        const newRel: CausalRelationType = {
+          ID: generateUUID(),
+          ActionTriggerTypeID: triggerId,
+          CreateTimestamp: now,
+          LastUpdatedBy: 'User',
+          ...rel
+        };
+        await CausalRelationRepository.save(newRel);
+      }
+
+      await this.fetchAll();
+    },
+
+    /**
+     * 処理名: トリガー更新
+     * @param trigger 更新対象のトリガー
+     * @param relations 関連の完全セット
+     * @param deletedRelationIds 削除する関連のID配列
+     *
+     * 処理概要: トリガーと関連の更新・削除を処理し永続化する
+     *
+     * 実装理由: 編集画面からの変更を保存するため
+     */
+    async updateTrigger(
+      trigger: ActionTriggerType,
+      relations: CausalRelationType[], // 既存更新および新規追加を含む完全セット
+      deletedRelationIds: string[] // 削除された関連ID
+    ) {
+      // トリガー更新
+      await ActionTriggerRepository.save({
+        ...trigger,
+        LastUpdatedBy: 'User'
+      });
+
+      // 関連削除
+      for (const id of deletedRelationIds) {
+        await CausalRelationRepository.delete(id);
+      }
+
+      // 関連保存（新規 or 更新）
+      for (const rel of relations) {
+        await CausalRelationRepository.save({
+          ...rel,
+          LastUpdatedBy: 'User'
+        });
+      }
+
+      await this.fetchAll();
+    },
+
+    // 単純削除
+    /**
+     * 処理名: トリガー削除
+     * @param id 削除対象のトリガーID
+     *
+     * 処理概要: 指定トリガーとそれに紐づく関連を削除する
+     *
+     * 実装理由: トリガー削除時に関連の整合性を保つため
+     */
+    async removeTrigger(id: string) {
+      // 関連も削除すべき
+      const rels = this.relations.filter(r => r.ActionTriggerTypeID === id);
+      for (const r of rels) {
+        await CausalRelationRepository.delete(r.ID);
+      }
+      await ActionTriggerRepository.delete(id);
+      await this.fetchAll();
+    }
+  }
+});
