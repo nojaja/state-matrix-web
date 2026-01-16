@@ -8,17 +8,16 @@
       <div class="mb-4">
         <label class="block text-sm font-medium text-gray-700">カテゴリ : </label>
         <div class="mt-1 flex items-center">
-            <button 
-                @click="openCategorySelector"
-                class="text-blue-600 hover:underline flex items-center"
-            >
-                <span v-if="selectedCategory">{{ selectedCategory.Name }}</span>
-                <span v-else class="text-gray-400">（カテゴリを選択してください）</span>
-            </button>
+          <button 
+            @click="openCategorySelector"
+            class="text-blue-600 hover:underline flex items-center"
+          >
+            <span v-if="selectedCategoryPath">{{ selectedCategoryPath }}</span>
+            <span v-else class="text-gray-400">（カテゴリを選択してください）</span>
+          </button>
         </div>
-      </div>
-
-      <div class="mb-4">
+        </div>
+        <div class="mb-4">
         <label class="block text-sm font-medium text-gray-700">工程名称</label>
         <input v-model="form.Name" type="text" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" placeholder="プロセス名称" />
       </div>
@@ -81,7 +80,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useProcessStore } from '../stores/processStore';
 import { useCategoryStore, type CategoryNode } from '../stores/categoryStore';
 import type { ProcessType } from '../types/models';
@@ -93,15 +92,12 @@ const categoryStore = useCategoryStore();
 const processes = computed(() => processStore.processes);
 const categoryMap = computed(() => categoryStore.getMap);
 
-const form = reactive({
-    ID: '',
-    Name: '',
-    Description: '',
-    CategoryID: ''
-});
+const form = processStore.draft as any;
 
 const isEditing = computed(() => !!form.ID);
-const selectedCategory = computed(() => form.CategoryID ? categoryMap.value[form.CategoryID] : null);
+const selectedCategoryPath = computed(() => {
+  return form.CategoryID ? categoryStore.getFullPath(form.CategoryID) : null;
+});
 const isValid = computed(() => form.Name && form.CategoryID);
 
 const showCategorySelector = ref(false);
@@ -138,7 +134,7 @@ function openCategorySelector() {
  * 処理概要: フォームに選択カテゴリを設定する
  */
 function onCategorySelected(node: CategoryNode) {
-  form.CategoryID = node.ID;
+  processStore.setDraft({ CategoryID: node.ID });
 }
 
 /**
@@ -148,10 +144,7 @@ function onCategorySelected(node: CategoryNode) {
  * 処理概要: フォームを編集対象の値で初期化する
  */
 function onEdit(proc: ProcessType) {
-  form.ID = proc.ID;
-  form.Name = proc.Name;
-  form.Description = proc.Description;
-  form.CategoryID = proc.CategoryID;
+  processStore.loadDraft(proc);
 }
 
 /**
@@ -203,9 +196,6 @@ async function onSubmit() {
  * 処理概要: フォームを初期状態に戻す
  */
 function resetForm() {
-  form.ID = '';
-  form.Name = '';
-  form.Description = '';
-  form.CategoryID = '';
+  processStore.resetDraft();
 }
 </script>

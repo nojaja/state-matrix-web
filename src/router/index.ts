@@ -4,6 +4,7 @@ import ArtifactView from '../views/ArtifactView.vue';
 import TriggerView from '../views/TriggerView.vue';
 import CategoryView from '../views/CategoryView.vue';
 import RoleView from '../views/RoleView.vue';
+import ProjectView from '../views/ProjectView.vue';
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -16,6 +17,11 @@ const router = createRouter({
       path: '/process',
       name: 'process',
       component: ProcessView
+    },
+    {
+      path: '/project',
+      name: 'project',
+      component: ProjectView
     },
     {
       path: '/artifact',

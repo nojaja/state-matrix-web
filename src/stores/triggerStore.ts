@@ -27,6 +27,20 @@ export const useTriggerStore = defineStore('data-mgmt-system/trigger', {
     relations: [] as CausalRelationType[],
     loading: false,
     initialized: false
+    ,
+    draft: {
+      ID: '',
+      Name: '',
+      Description: '',
+      CategoryID: '',
+      ProcessTypeID: '',
+      Rollgroup: '',
+      Timing: '',
+      TimingDetail: '',
+      ActionType: 0,
+      inputArtifacts: [] as { id: string; name: string }[],
+      outputArtifacts: [] as { id: string; name: string }[]
+    } as any
   }),
   getters: {
     /**
@@ -71,6 +85,47 @@ export const useTriggerStore = defineStore('data-mgmt-system/trigger', {
       } finally {
         this.loading = false;
       }
+    },
+
+    /**
+     * 処理名: トリガードラフトをマージして設定
+     * @param partial ドラフトへマージする部分情報
+     */
+    setDraft(partial: Partial<ActionTriggerType> & { ID?: string }) {
+      Object.assign(this.draft, partial);
+    },
+    /**
+     * 処理名: トリガーと関係をドラフトに読み込む
+     * @param trigger 読み込むトリガー
+     * @param relations トリガーに紐づく関係配列
+     */
+    loadDraft(trigger: ActionTriggerType, relations: CausalRelationType[]) {
+      // assign scalar fields
+      Object.assign(this.draft, {
+        ID: trigger.ID,
+        Name: trigger.Name,
+        Description: trigger.Description,
+        CategoryID: trigger.CategoryID,
+        ProcessTypeID: trigger.ProcessTypeID,
+        Rollgroup: trigger.Rollgroup,
+        Timing: trigger.Timing,
+        TimingDetail: trigger.TimingDetail,
+        ActionType: trigger.ActionType
+      });
+      // update arrays in-place to preserve references
+      const inArts = relations.filter(r => r.CrudType === 'Input').map(r => ({ id: r.ArtifactTypeID, name: '' }));
+      const outArts = relations.filter(r => r.CrudType === 'Output').map(r => ({ id: r.ArtifactTypeID, name: '' }));
+      this.draft.inputArtifacts.splice(0, this.draft.inputArtifacts.length, ...inArts);
+      this.draft.outputArtifacts.splice(0, this.draft.outputArtifacts.length, ...outArts);
+    },
+    /**
+     * 処理名: ドラフトを初期化する
+     */
+    resetDraft() {
+      Object.assign(this.draft, { ID: '', Name: '', Description: '', CategoryID: '', ProcessTypeID: '', Rollgroup: '', Timing: '', TimingDetail: '', ActionType: 0 });
+      // clear arrays in-place
+      this.draft.inputArtifacts.splice(0, this.draft.inputArtifacts.length);
+      this.draft.outputArtifacts.splice(0, this.draft.outputArtifacts.length);
     },
 
     /**

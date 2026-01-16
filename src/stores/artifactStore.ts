@@ -19,8 +19,35 @@ export const useArtifactStore = defineStore('artifact', {
     artifacts: [] as ArtifactType[],
     loading: false,
     initialized: false,
+    draft: {
+      ID: '',
+      Name: '',
+      Content: '',
+      Note: '',
+      CategoryID: ''
+    } as Partial<ArtifactType> & { ID: string; Name: string; Content: string; Note: string; CategoryID: string },
   }),
   actions: {
+    /**
+     * 処理名: ドラフトを設定
+     * @param partial ドラフトにマージする部分情報
+     */
+    setDraft(partial: Partial<ArtifactType> & { ID?: string }) {
+      Object.assign(this.draft, partial);
+    },
+    /**
+     * 処理名: アイテムをドラフトとして読み込む
+     * @param item 読み込むアーティファクト
+     */
+    loadDraft(item: ArtifactType) {
+      Object.assign(this.draft, item);
+    },
+    /**
+     * 処理名: ドラフトを初期化する
+     */
+    resetDraft() {
+      Object.assign(this.draft, { ID: '', Name: '', Content: '', Note: '', CategoryID: '' });
+    },
     /**
      * 処理名: 初期化
      *

@@ -65,6 +65,25 @@ export const useCategoryStore = defineStore('category', {
        return map; 
     },
     /**
+     * 処理名: フルパス取得
+     * @returns (id: string) => string ルートからのスラッシュ区切りパス
+     */
+    getFullPath(): (id: string) => string {
+      const map: Record<string, CategoryMaster> = this.getMap;
+      return (id: string) => {
+        if (!id) return '';
+        const parts: string[] = [];
+        let cur = map[id];
+        if (!cur) return id;
+        while (cur) {
+          parts.unshift(cur.Name);
+          if (!cur.ParentID) break;
+          cur = map[cur.ParentID];
+        }
+        return parts.join('/');
+      };
+    },
+    /**
      * 処理名: ID->Category マップ取得
      * @returns Record<string,CategoryMaster>
      */

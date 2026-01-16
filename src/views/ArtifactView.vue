@@ -4,19 +4,7 @@
     <div class="bg-white p-6 rounded shadow">
       <h2 class="text-lg font-bold mb-4">作成物管理</h2>
       
-      <!-- Category Selector -->
-      <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700">カテゴリ : </label>
-        <div class="mt-1 flex items-center">
-            <button 
-                @click="openCategorySelector"
-                class="text-blue-600 hover:underline flex items-center"
-            >
-                <span v-if="selectedCategory">{{ selectedCategory.Name }}</span>
-                <span v-else class="text-gray-400">（カテゴリを選択してください）</span>
-            </button>
-        </div>
-      </div>
+      <CategorySelector :path="selectedCategoryPath" @open="openCategorySelector" />
 
       <div class="mb-4">
         <label class="block text-sm font-medium text-gray-700">名称</label>
@@ -88,11 +76,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useArtifactStore } from '../stores/artifactStore';
 import { useCategoryStore, type CategoryNode } from '../stores/categoryStore';
 import type { ArtifactType } from '../types/models';
 import CategorySelectorModal from '../components/common/CategorySelectorModal.vue';
+import CategorySelector from '../components/common/CategorySelector.vue';
 
 const artifactStore = useArtifactStore();
 const categoryStore = useCategoryStore();
@@ -100,16 +89,12 @@ const categoryStore = useCategoryStore();
 const artifacts = computed(() => artifactStore.artifacts);
 const categoryMap = computed(() => categoryStore.getMap);
 
-const form = reactive({
-    ID: '',
-    Name: '',
-    Content: '',
-    Note: '',
-    CategoryID: ''
-});
+const form = artifactStore.draft as any;
 
 const isEditing = computed(() => !!form.ID);
-const selectedCategory = computed(() => form.CategoryID ? categoryMap.value[form.CategoryID] : null);
+const selectedCategoryPath = computed(() => {
+  return form.CategoryID ? categoryStore.getFullPath(form.CategoryID) : null;
+});
 const isValid = computed(() => form.Name && form.CategoryID);
 
 const showCategorySelector = ref(false);
@@ -146,7 +131,7 @@ function openCategorySelector() {
  * 処理概要: フォームのカテゴリ ID を設定する
  */
 function onCategorySelected(node: CategoryNode) {
-  form.CategoryID = node.ID;
+  artifactStore.setDraft({ CategoryID: node.ID });
 }
 
 /**
@@ -156,11 +141,7 @@ function onCategorySelected(node: CategoryNode) {
  * 処理概要: フォームに対象データを読み込んで編集状態にする
  */
 function onEdit(item: ArtifactType) {
-  form.ID = item.ID;
-  form.Name = item.Name;
-  form.Content = item.Content;
-  form.Note = item.Note;
-  form.CategoryID = item.CategoryID;
+  artifactStore.loadDraft(item);
 }
 
 /**
@@ -212,10 +193,6 @@ async function onSubmit() {
  * 処理概要: フォームを初期状態に戻す
  */
 function resetForm() {
-  form.ID = '';
-  form.Name = '';
-  form.Content = '';
-  form.Note = '';
-  form.CategoryID = '';
+  artifactStore.resetDraft();
 }
 </script>

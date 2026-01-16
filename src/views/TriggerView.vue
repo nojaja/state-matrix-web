@@ -4,19 +4,7 @@
     <div class="bg-white p-6 rounded shadow">
       <h2 class="text-lg font-bold mb-4">トリガー管理</h2>
       
-      <!-- Category Selector -->
-      <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700">カテゴリ : </label>
-        <div class="mt-1 flex items-center">
-            <button 
-                @click="openCategorySelector"
-                class="text-blue-600 hover:underline flex items-center"
-            >
-                <span v-if="selectedCategory">{{ selectedCategory.Name }}</span>
-                <span v-else class="text-gray-400">（カテゴリを選択してください）</span>
-            </button>
-        </div>
-      </div>
+        <CategorySelector :path="selectedCategoryPath" @open="openCategorySelector" />
 
       <div class="mb-4">
         <label class="block text-sm font-medium text-gray-700">名称</label>
@@ -171,13 +159,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useTriggerStore } from '../stores/triggerStore';
 import { useCategoryStore, type CategoryNode } from '../stores/categoryStore';
 import { useProcessStore } from '../stores/processStore';
 import { useArtifactStore } from '../stores/artifactStore';
 import type { ActionTriggerType, CausalRelationType } from '../types/models';
 import CategorySelectorModal from '../components/common/CategorySelectorModal.vue';
+import CategorySelector from '../components/common/CategorySelector.vue';
 import SimpleSelectorModal from '../components/common/SimpleSelectorModal.vue';
 
 const triggerStore = useTriggerStore();
@@ -187,24 +176,15 @@ const artifactStore = useArtifactStore();
 
 const triggers = computed(() => triggerStore.triggers);
 
-const form = reactive({
-    ID: '',
-    Name: '',
-    Description: '',
-    CategoryID: '',
-    ProcessTypeID: '',
-    Rollgroup: '',
-    Timing: '',
-    TimingDetail: '',
-    ActionType: 0
-});
+const form = triggerStore.draft as any;
 
-// Editing state for relations
-const inputArtifacts = ref<{id: string, name: string}[]>([]);
-const outputArtifacts = ref<{id: string, name: string}[]>([]);
-
+// Editing state for relations is persisted in store.draft
 const isEditing = computed(() => !!form.ID);
-const selectedCategory = computed(() => categoryStore.getMap[form.CategoryID] ?? null);
+const selectedCategoryPath = computed(() => {
+  return form.CategoryID ? categoryStore.getFullPath(form.CategoryID) : null;
+});
+const inputArtifacts = triggerStore.draft.inputArtifacts as {id: string, name: string}[];
+const outputArtifacts = triggerStore.draft.outputArtifacts as {id: string, name: string}[];
 const selectedProcess = computed(() => processStore.processes.find(p => p.ID === form.ProcessTypeID));
 
 const isValid = computed(() => form.Name && form.CategoryID && form.ProcessTypeID);
@@ -293,15 +273,15 @@ function openArtifactSelector(mode: 'input' | 'output') {
  * @param item.name 選択された作成物の表示名
  */
 function onArtifactSelected(item: {id: string, name: string}) {
-    if(artifactSelectorMode.value === 'input') {
-        if(!inputArtifacts.value.some(a => a.id === item.id)) {
-            inputArtifacts.value.push({ id: item.id, name: item.name });
-        }
-    } else {
-        if(!outputArtifacts.value.some(a => a.id === item.id)) {
-            outputArtifacts.value.push({ id: item.id, name: item.name });
-        }
+  if(artifactSelectorMode.value === 'input') {
+    if(!inputArtifacts.some(a => a.id === item.id)) {
+      inputArtifacts.push({ id: item.id, name: item.name });
     }
+  } else {
+    if(!outputArtifacts.some(a => a.id === item.id)) {
+      outputArtifacts.push({ id: item.id, name: item.name });
+    }
+  }
 }
 
 /**
@@ -310,8 +290,8 @@ function onArtifactSelected(item: {id: string, name: string}) {
  * @param mode 'input' または 'output'
  */
 function removeArtifact(idx: number, mode: 'input' | 'output') {
-    if(mode === 'input') inputArtifacts.value.splice(idx, 1);
-    else outputArtifacts.value.splice(idx, 1);
+  if(mode === 'input') inputArtifacts.splice(idx, 1);
+  else outputArtifacts.splice(idx, 1);
 }
 
 // --- Submit / Load ---
@@ -326,12 +306,11 @@ async function onSubmit() {
 
     // Relations construction
     const relations: Omit<CausalRelationType, 'ID' | 'ActionTriggerTypeID' | 'CreateTimestamp' | 'LastUpdatedBy'>[] = [];
-    
-    inputArtifacts.value.forEach(a => {
-        relations.push({ ArtifactTypeID: a.id, CrudType: 'Input' });
+    inputArtifacts.forEach((a) => {
+      relations.push({ ArtifactTypeID: a.id, CrudType: 'Input' });
     });
-    outputArtifacts.value.forEach(a => {
-        relations.push({ ArtifactTypeID: a.id, CrudType: 'Output' });
+    outputArtifacts.forEach((a) => {
+      relations.push({ ArtifactTypeID: a.id, CrudType: 'Output' });
     });
 
     if(isEditing.value) {
@@ -379,20 +358,12 @@ function onEdit(t: ActionTriggerType) {
     form.TimingDetail = t.TimingDetail;
     form.ActionType = t.ActionType;
     
-    // Load relations
+    // Load relations into draft and resolve names
     const rels = triggerStore.getRelationsByTriggerId(t.ID);
-    inputArtifacts.value = rels
-       .filter((r: CausalRelationType) => r.CrudType === 'Input')
-       .map((r: CausalRelationType) => {
-           const a = artifactStore.artifacts.find(art => art.ID === r.ArtifactTypeID);
-           return { id: r.ArtifactTypeID, name: a?.Name ?? 'Unknown' };
-       });
-    outputArtifacts.value = rels
-       .filter((r: CausalRelationType) => r.CrudType === 'Output')
-       .map((r: CausalRelationType) => {
-           const a = artifactStore.artifacts.find(art => art.ID === r.ArtifactTypeID);
-           return { id: r.ArtifactTypeID, name: a?.Name ?? 'Unknown' };
-       });
+    triggerStore.loadDraft(t, rels as CausalRelationType[]);
+    // Resolve artifact names from artifactStore
+    triggerStore.draft.inputArtifacts = inputArtifacts.map((a) => ({ id: a.id, name: artifactStore.artifacts.find(x => x.ID === a.id)?.Name ?? 'Unknown' }));
+    triggerStore.draft.outputArtifacts = outputArtifacts.map((a) => ({ id: a.id, name: artifactStore.artifacts.find(x => x.ID === a.id)?.Name ?? 'Unknown' }));
 }
 
 /**
@@ -412,16 +383,6 @@ async function onDelete(t: ActionTriggerType) {
  * 処理概要: フォームと一時編集状態を初期化する
  */
 function resetForm() {
-    form.ID = '';
-    form.Name = '';
-    form.Description = '';
-    form.CategoryID = '';
-    form.ProcessTypeID = '';
-    form.Rollgroup = '';
-    form.Timing = '';
-    form.TimingDetail = '';
-    form.ActionType = 0;
-    inputArtifacts.value = [];
-    outputArtifacts.value = [];
+    triggerStore.resetDraft();
 }
 </script>

@@ -26,7 +26,8 @@
             @select="onSelect"
             @add-child="onAddChild"
             @delete="onDelete"
-            @move="onMove"
+          @move="onMove"
+          @rename="onRename"
          />
       </div>
     </div>
@@ -141,11 +142,7 @@ async function confirmSave() {
 
 /**
  * 処理名: ノード移動処理
- * @param param0.draggedId 移動元のカテゴリ ID
- * @param param0.targetId 移動先のカテゴリ ID
- * @param root0 互換用パラメタ名
- * @param root0.draggedId 互換用移動元 ID
- * @param root0.targetId 互換用移動先 ID
+ * @param {{draggedId: string, targetId: string}} param0 - 移動情報
  *
  * 処理概要: ドラッグで移動されたカテゴリの親 ID を更新する
  */
@@ -157,5 +154,17 @@ function onMove({ draggedId, targetId }: { draggedId: string; targetId: string }
       ParentID: targetId
     });
   }
+}
+
+/**
+ * 処理名: ノード名変更
+ * @param {{id: string, name: string}} param0 - 変更対象のカテゴリIDと新名称
+ *
+ * 処理概要: ストアの update を呼んで名称を永続化する
+ */
+async function onRename({ id, name }: { id: string; name: string }) {
+  const category = categoryStore.categories.find(c => c.ID === id);
+  if (!category) return;
+  await categoryStore.update({ ...category, Name: name });
 }
 </script>

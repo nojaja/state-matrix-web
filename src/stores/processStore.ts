@@ -19,8 +19,35 @@ export const useProcessStore = defineStore('process', {
     processes: [] as ProcessType[],
     loading: false,
     initialized: false,
+    draft: {
+      ID: '',
+      Name: '',
+      Description: '',
+      CategoryID: ''
+    } as Partial<ProcessType> & { ID: string; Name: string; Description: string; CategoryID: string },
   }),
   actions: {
+    /**
+     * 処理名: ドラフトを更新
+     * @param partial ドラフトにマージする部分情報
+     */
+    setDraft(partial: Partial<ProcessType> & { ID?: string }) {
+      Object.assign(this.draft, partial);
+    },
+    /**
+     * 処理名: アイテムをドラフトとして読み込む
+     * @param item 読み込むプロセス項目
+     */
+    loadDraft(item: ProcessType) {
+      // preserve reactive reference
+      Object.assign(this.draft, item);
+    },
+    /**
+     * 処理名: ドラフトをリセットする
+     */
+    resetDraft() {
+      Object.assign(this.draft, { ID: '', Name: '', Description: '', CategoryID: '' });
+    },
     /**
      * 処理名: 初期化
      *

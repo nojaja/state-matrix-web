@@ -38,8 +38,17 @@ export class OpfsRepository<T extends { ID: string }> {
     // まずルートディレクトリを取得（なければ作成）
     let dir: FileSystemDirectoryHandle = await root.getDirectoryHandle(ROOT_DIR, { create: true });
 
+    // 選択プロジェクトがあればルート直下に挿入する
+    let projectSegment: string | null = null;
+    try {
+      if (typeof localStorage !== 'undefined') projectSegment = localStorage.getItem('selectedProject');
+    } catch (_e) {
+      projectSegment = null;
+    }
+
     // this.directoryName はネストされたパス（例: "foo/bar"）を想定
-    const parts = this.directoryName.split('/').filter(p => p && p.length > 0);
+    const partsBase = this.directoryName.split('/').filter(p => p && p.length > 0);
+    const parts = projectSegment ? [projectSegment, ...partsBase] : partsBase;
     for (const part of parts) {
       dir = await dir.getDirectoryHandle(part, { create: true });
     }
