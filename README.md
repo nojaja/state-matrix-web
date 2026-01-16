@@ -22,86 +22,102 @@
 
 ## 推奨プロジェクト構成（設計仕様より）
 
-（設計書に記載の想定構成の抜粋）
+# state-matrix-web
 
-```
-state-matrix-web/
-├── apps/
-│   ├── web-frontend/    # Vue 3 SPA
-│   └── api-server/      # Node.js (JSON-RPC + WebSocket)
-├── packages/            # shared domain / ui kit
-├── configs/
-└── docs/                # spec/ 等
-```
+本リポジトリは「状態整理マトリクス（Action × IN/OUT）」に関するWebアプリケーション実装と設計を含むプロジェクトです。
 
-## Technology Stack (設計書より)
+**現状**: 設計ドキュメント（`spec/`）に加え、Vue 3 ベースのフロントエンド実装（`src/`）とテストの雛形が存在します。以下はコードベースに基づく事実に限定したドキュメントです。
 
-- Node.js 22.21.0 (ESM)
-- TypeScript (strict)
-- Frontend: Vue.js 3 (Composition API) + Pinia + Vue Router
-- Build: Webpack 5 / Vite（開発用）
-- DB: PostgreSQL
-- API: JSON-RPC 2.0 over HTTPS / WebSocket
+**主要なファイル/ディレクトリ**
+- [package.json](package.json) - スクリプトと依存定義
+- [src/](src/) - フロントエンド実装（Vue 3 + Pinia + Vue Router）
+- [src/App.vue](src/App.vue) - ルートコンポーネント（ページタブ, `router-view`）
+- [src/main.ts](src/main.ts) - アプリエントリ（Pinia、Router を登録）
+- [src/views/](src/views/) - 各ページビュー（Process/Artifact/Trigger/Category/Role 等）
+- [src/stores/](src/stores/) - Pinia ストア（artifactStore 等）
+- [test/unit/](test/unit/) - ユニットテスト（Jest）
+- [spec/](spec/) - 設計・要件・ER図等のドキュメント
 
-（詳細は [spec/nonfunctional_requirements.md](spec/nonfunctional_requirements.md) を参照）
+**技術スタック（codebaseより）**
+- フレームワーク: `vue` (^3.x)
+- 状態管理: `pinia`
+- ルーティング: `vue-router`
+- ビルド/開発: `vite`（`dev` スクリプトで起動）
+- テスト: `jest`（ユニットテスト）
+- 言語: TypeScript（`type: "module"` が有効）
+- 主要依存: `date-fns`, `js-yaml`, `lucide-vue-next`, `uuid` など（詳細は `package.json`）
 
-## 主な機能（設計）
+## 機能（実装上の確認）
+- UI: タブ式のページ構成で以下の画面が用意されています。
+  - `プロセス管理`、`作成物管理`、`トリガー管理`、`カテゴリ管理`、`ロール管理`（`src/views/` の各 View）
+- ストア: `artifactStore`, `categoryStore`, `processStore`, `triggerStore`（`src/stores/`）
+- テスト: `test/unit/` にユニットテストが存在します（Jest 設定は `jest.unit.config.js`）。
 
-- 案件（Case）管理: CRUD、Owner/履歴管理
-- 型マスタ管理: `CategoryMaster`, `*Types`（Job/Action/Artifact）
-- ActionTrigger（IN/OUT）入力とマトリクス編集
-- 成果物（Artifact）実績管理
-- 因果関係（ActionTrigger ↔ Artifact）の登録とテンプレート適用
-- ギャップ分析・未定義型検出、名寄せ（merge）・分割支援
-- CSV/JSON エクスポート、分析向けデータ提供
+⚠️ 注意: 設計ドキュメントにはより広い仕様（APIサーバー、DB設計など）が記載されていますが、本 README の機能記述はリポジトリ内の実装ファイルに基づいています。
 
-⚠️ 実装状況: 設計書のみ存在し、実装は未着手です。状態遷移図のレンダリング等は設計上「外部ツール連携」を想定しています（specを参照）。
-
-## セットアップ（現状の注意点）
-
-- このリポジトリには `package.json` や実装コードが含まれていないため、依存インストールや実行スクリプトは定義されていません。
-- 設計書の非機能要件に沿う開発環境の要件:
-	- Node.js `22.21.0`
-	- npm `10.x`
-	- PostgreSQL（開発用に docker-compose 想定）
-
-例（実装が追加された場合の想定コマンド）:
+## セットアップ
+1. 依存をインストール:
 
 ```powershell
 npm install
-npm run dev    # フロント: webpack-dev-server / Vite
+```
+
+2. 開発サーバ起動（Vite）:
+
+```powershell
+npm run dev
+```
+
+3. ビルド（プロダクション）:
+
+```powershell
 npm run build
 ```
 
-⚠️ 実行スクリプトは未定義です。実装追加時に `package.json` を参照してください。
+4. プレビュー（ビルド確認）:
 
-## Usage（設計上の想定）
+```powershell
+npm run preview
+```
 
-- Web アプリは開発サーバで動作し、既定で `http://localhost:8080` を想定しています（[spec/ui.setup.instructions.md] 相当）。
-- メインのワークフローは `Contributor` が案件と ActionTrigger を入力し、`Analyst` が型マスタの整理とギャップ分析を行う流れです（詳細は [spec/functional_requirements.md](spec/functional_requirements.md)）。
+5. テスト:
 
-## 技術的メモ / 実装上のポイント
+```powershell
+npm run test
+# CI 用にカバレッジを生成する: npm run test:ci
+```
 
-- API は JSON-RPC 2.0 を前提（HTTP POST `/rpc` と WebSocket 経由の両対応）。
-- 認証は SSO (OAuth/OIDC) を想定し、JWT 検証と RBAC/ABAC を組み合わせる設計。
-- データモデルは `spec/ER.md` に PlantUML 形式で定義されています。DB は PostgreSQL を想定。
+6. 静的解析/リンティング:
 
-## 現在のステータス
+```powershell
+npm run lint
+```
 
-- 設計ドキュメント: 完了（`spec/` に要件・非機能要件・ER図・シーケンスあり）
-- 実装: なし（実装用のソースコード、`package.json`、スクリプトは未配置）
+## 開発者向けノート
+- `npm run dev` は `vite` を起動します。`vite.config.ts` にサーバポート設定は含まれていないため、Vite の既定値が使用されます。
+- ESM (`type: "module"`) と TypeScript を採用しているため、import/export を用いた ESM 構成です。
+- ユニットテストは Jest（`jest.unit.config.js`）で動作します。テストは TypeScript のテストファイルを対象としています。
 
-## 次の推奨アクション
+## Project Structure（主要ファイル説明）
+- [src/main.ts](src/main.ts): アプリのエントリ。Pinia と Router を登録して `#app` にマウントします。
+- [src/App.vue](src/App.vue): ルートレイアウト。タブで主要ページへ遷移し、`<router-view>` で各ページを描画します。
+- [src/views/*](src/views/): 各ページコンポーネント（`ArtifactView.vue`, `CategoryView.vue`, `ProcessView.vue`, `RoleView.vue`, `TriggerView.vue`）
+- [src/stores/*](src/stores/): Pinia ストア群（各種 CRUD と状態管理の責務）
+- [spec/](spec/): 要件・ER図・シーケンス等、設計ドキュメント群
 
-1. リポジトリに `apps/web-frontend` / `apps/api-server` の骨子を追加する。
-2. `package.json` と開発用スクリプトを定義する（Node.js 22 ベース）。
-3. CI (lint/typecheck/test/build) の初期パイプラインを作る。
+## 既存の設計ドキュメント
+- 詳細な要件や ER 図などは [spec/](spec/) にあります。実装と設計を照合しながら進めてください。
 
-## 参照 / 追加資料
-
-- 設計書: [spec/functional_requirements.md](spec/functional_requirements.md)
-- 非機能要件: [spec/nonfunctional_requirements.md](spec/nonfunctional_requirements.md)
-- データモデル: [spec/ER.md](spec/ER.md)
+## 既知の未実装/拡張候補
+- サーバサイド API 実装（JSON-RPC や DB 連携）は現状含まれていません（設計は spec に記載）。 ⚠️
+- CI ワークフロー（lint/typecheck/test/build）の一部は未構成の場合があります。プロジェクト要件に合わせて `.github/workflows` 等を追加してください。
 
 ---
-更新: 設計書を基に `README.md` を作成しました。次に実装骨子や `package.json` を追加できます。ご希望あれば作成します。
+更新履歴: README をリポジトリ内の実装（`src/`）と `package.json` の内容に合わせて更新しました。
+
+ご希望があれば、次の作業を進めます:
+- `apps/web-frontend` の単体化（Vite + Vue の明確なエントリ分離）
+- CI 設定（GitHub Actions）と自動テストパイプラインの追加
+- API サーバの骨子（Node + TypeScript）作成
+
+---
