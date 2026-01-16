@@ -30,7 +30,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import ModalDialog from './ModalDialog.vue';
 
 interface Item {
@@ -65,6 +65,32 @@ const filteredItems = computed(() => {
       searchQuery.value = '';
     }
   });
+
+/**
+ * 処理名: キーダウンイベントハンドラ
+ *
+ * 処理概要: Enter/Escape のキーに応じて選択確定またはモーダルを閉じる
+ * @param e キーイベント
+ */
+function onKeydown(e: KeyboardEvent) {
+  if(e.key === 'Enter') {
+    if(selectedId.value) confirmSelection();
+  } else if(e.key === 'Escape') {
+    emit('update:modelValue', false);
+  }
+}
+
+watch(() => _props.modelValue, (val) => {
+  if(val) {
+    window.addEventListener('keydown', onKeydown);
+  } else {
+    window.removeEventListener('keydown', onKeydown);
+  }
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown);
+});
 
 /**
  * 処理名: 選択確定

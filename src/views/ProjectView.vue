@@ -6,11 +6,25 @@
       <button class="bg-blue-600 text-white px-3 py-1 rounded" @click="showNew = !showNew">新規作成</button>
     </div>
 
-    <div v-if="showNew" class="mb-4">
-      <input v-model="newName" placeholder="プロジェクト名を入力" class="border p-2 mr-2" />
-      <button class="bg-green-600 text-white px-3 py-1 rounded" @click="create">作成</button>
-      <button class="ml-2 px-3 py-1 rounded border" @click="cancel">キャンセル</button>
-    </div>
+    <ModalDialog v-model="showNew" title="プロジェクト作成">
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700">名称</label>
+          <input
+            v-model="newName"
+            type="text"
+            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border"
+            placeholder="プロジェクト名"
+            @keydown.enter.prevent="create"
+            @keydown.esc.prevent="showNew = false"
+          />
+        </div>
+      </div>
+      <template #footer>
+        <button @click="showNew = false; newName = ''" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">キャンセル</button>
+        <button @click="create" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">保存</button>
+      </template>
+    </ModalDialog>
 
     <div v-if="store.loading">読み込み中...</div>
 
@@ -39,6 +53,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useProjectStore } from '../stores/projectStore'
+import ModalDialog from '../components/common/ModalDialog.vue'
 
 const store = useProjectStore()
 const showNew = ref(false)
@@ -66,10 +81,12 @@ async function create() {
 /**
  * 処理名: 作成のキャンセル
  */
-function cancel() {
+function _cancel() {
   newName.value = ''
   showNew.value = false
 }
+// 参照用（ビルド時の未使用エラー回避）
+void _cancel;
 
 /**
  * 処理名: プロジェクト選択

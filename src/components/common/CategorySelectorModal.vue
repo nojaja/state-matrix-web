@@ -27,12 +27,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import { useCategoryStore, type CategoryNode } from '../../stores/categoryStore';
 import ModalDialog from './ModalDialog.vue';
 import CategoryTreeItem from '../category/CategoryTreeItem.vue';
 
-defineProps<{
+const props = defineProps<{
   modelValue: boolean;
   initialSelectedId?: string | null;
 }>();
@@ -53,6 +53,33 @@ function initStore() {
 }
 
 onMounted(initStore);
+
+/**
+ * グローバルなキーイベントハンドラを追加する。
+ * Enter: 選択確定（selectedId があれば）
+ * Escape: モーダルを閉じる
+ * @param e KeyboardEvent - 発生したキーイベント
+ */
+function onGlobalKeydown(e: KeyboardEvent) {
+  if (!props.modelValue) return;
+  if (e.key === 'Enter') {
+    if (selectedId.value) {
+      confirmSelection();
+      e.preventDefault();
+    }
+  } else if (e.key === 'Escape') {
+    emit('update:modelValue', false);
+    e.preventDefault();
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', onGlobalKeydown);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onGlobalKeydown);
+});
 
 /**
  * 処理名: ノード選択ハンドラ

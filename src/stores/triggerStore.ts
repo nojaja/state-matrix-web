@@ -28,7 +28,7 @@ export const useTriggerStore = defineStore('data-mgmt-system/trigger', {
     loading: false,
     initialized: false
     ,
-    draft: {
+      draft: {
       ID: '',
       Name: '',
       Description: '',
@@ -39,7 +39,7 @@ export const useTriggerStore = defineStore('data-mgmt-system/trigger', {
       TimingDetail: '',
       ActionType: 0,
       inputArtifacts: [] as { id: string; name: string }[],
-      outputArtifacts: [] as { id: string; name: string }[]
+      outputArtifacts: [] as { id: string; name: string; crud?: string }[]
     } as any
   }),
   getters: {
@@ -114,7 +114,9 @@ export const useTriggerStore = defineStore('data-mgmt-system/trigger', {
       });
       // update arrays in-place to preserve references
       const inArts = relations.filter(r => r.CrudType === 'Input').map(r => ({ id: r.ArtifactTypeID, name: '' }));
-      const outArts = relations.filter(r => r.CrudType === 'Output').map(r => ({ id: r.ArtifactTypeID, name: '' }));
+      const outArts = relations
+        .filter(r => r.CrudType === 'Output' || r.CrudType === 'Create' || r.CrudType === 'Update')
+        .map(r => ({ id: r.ArtifactTypeID, name: '', crud: r.CrudType === 'Output' ? 'Create' : r.CrudType }));
       this.draft.inputArtifacts.splice(0, this.draft.inputArtifacts.length, ...inArts);
       this.draft.outputArtifacts.splice(0, this.draft.outputArtifacts.length, ...outArts);
     },

@@ -80,10 +80,22 @@
                <div class="font-bold text-center bg-gray-200 py-1 mb-2 rounded">アウトプット作成物</div>
                <div class="flex-1 space-y-2">
                   <div v-for="(art, idx) in outputArtifacts" :key="idx" class="flex justify-between items-center border p-1 rounded">
-                     <span class="truncate text-sm" :title="art.name">{{ art.name }}</span>
-                     <button @click="removeArtifact(idx, 'output')" class="text-red-500 hover:bg-red-50 rounded">
-                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                     </button>
+                    <div class="flex items-center space-x-3">
+                      <span class="truncate text-sm" :title="art.name">{{ art.name }}</span>
+                      <div class="text-sm text-gray-600 flex items-center space-x-3">
+                        <label class="flex items-center space-x-1">
+                          <input type="radio" :name="`out-crud-` + idx" v-model="art.crud" value="Create" class="w-4 h-4" />
+                          <span class="text-xs">作成</span>
+                        </label>
+                        <label class="flex items-center space-x-1">
+                          <input type="radio" :name="`out-crud-` + idx" v-model="art.crud" value="Update" class="w-4 h-4" />
+                          <span class="text-xs">更新</span>
+                        </label>
+                      </div>
+                    </div>
+                    <button @click="removeArtifact(idx, 'output')" class="text-red-500 hover:bg-red-50 rounded">
+                      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
                   </div>
                </div>
                <button @click="openArtifactSelector('output')" class="mt-2 w-full py-1 border-2 border-dashed border-gray-300 text-gray-500 rounded hover:border-gray-400 hover:text-gray-600">
@@ -184,7 +196,7 @@ const selectedCategoryPath = computed(() => {
   return form.CategoryID ? categoryStore.getFullPath(form.CategoryID) : null;
 });
 const inputArtifacts = triggerStore.draft.inputArtifacts as {id: string, name: string}[];
-const outputArtifacts = triggerStore.draft.outputArtifacts as {id: string, name: string}[];
+const outputArtifacts = triggerStore.draft.outputArtifacts as {id: string, name: string, crud?: string}[];
 const selectedProcess = computed(() => processStore.processes.find(p => p.ID === form.ProcessTypeID));
 
 const isValid = computed(() => form.Name && form.CategoryID && form.ProcessTypeID);
@@ -279,7 +291,7 @@ function onArtifactSelected(item: {id: string, name: string}) {
     }
   } else {
     if(!outputArtifacts.some(a => a.id === item.id)) {
-      outputArtifacts.push({ id: item.id, name: item.name });
+      outputArtifacts.push({ id: item.id, name: item.name, crud: 'Create' });
     }
   }
 }
@@ -310,7 +322,7 @@ async function onSubmit() {
       relations.push({ ArtifactTypeID: a.id, CrudType: 'Input' });
     });
     outputArtifacts.forEach((a) => {
-      relations.push({ ArtifactTypeID: a.id, CrudType: 'Output' });
+      relations.push({ ArtifactTypeID: a.id, CrudType: a.crud ?? 'Create' });
     });
 
     if(isEditing.value) {
@@ -361,9 +373,15 @@ function onEdit(t: ActionTriggerType) {
     // Load relations into draft and resolve names
     const rels = triggerStore.getRelationsByTriggerId(t.ID);
     triggerStore.loadDraft(t, rels as CausalRelationType[]);
-    // Resolve artifact names from artifactStore
-    triggerStore.draft.inputArtifacts = inputArtifacts.map((a) => ({ id: a.id, name: artifactStore.artifacts.find(x => x.ID === a.id)?.Name ?? 'Unknown' }));
-    triggerStore.draft.outputArtifacts = outputArtifacts.map((a) => ({ id: a.id, name: artifactStore.artifacts.find(x => x.ID === a.id)?.Name ?? 'Unknown' }));
+    // Resolve artifact names from artifactStore (preserve crud for outputs)
+    // resolve names in-place to preserve the original array references
+    triggerStore.draft.inputArtifacts.forEach((a: any) => {
+      a.name = artifactStore.artifacts.find(x => x.ID === a.id)?.Name ?? 'Unknown';
+    });
+    triggerStore.draft.outputArtifacts.forEach((a: any) => {
+      a.name = artifactStore.artifacts.find(x => x.ID === a.id)?.Name ?? 'Unknown';
+      if (!a.crud) a.crud = 'Create';
+    });
 }
 
 /**

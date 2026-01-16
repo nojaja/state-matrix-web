@@ -74,4 +74,33 @@ describe('triggerStore actions', () => {
     expect(CausalRelationRepository.delete).toHaveBeenCalled();
     expect(CausalRelationRepository.save).toHaveBeenCalled();
   });
+
+  it('loadDraft preserves draft array references and maps relations to artifacts', () => {
+    const store = useTriggerStore();
+    // keep original references
+    const inRef = store.draft.inputArtifacts;
+    const outRef = store.draft.outputArtifacts;
+
+    const trigger = { ID: 't1', ActionType: 1, CategoryID: 'c', ProcessTypeID: 'p', Name: 'T', Description: '', Rollgroup: '', Timing: '', TimingDetail: '', CreateTimestamp: '', LastUpdatedBy: '' };
+    const relations = [
+      { ID: 'r-in-1', ActionTriggerTypeID: 't1', ArtifactTypeID: 'a1', CrudType: 'Input', CreateTimestamp: '', LastUpdatedBy: '' },
+      { ID: 'r-out-1', ActionTriggerTypeID: 't1', ArtifactTypeID: 'a2', CrudType: 'Create', CreateTimestamp: '', LastUpdatedBy: '' },
+      { ID: 'r-out-2', ActionTriggerTypeID: 't1', ArtifactTypeID: 'a3', CrudType: 'Update', CreateTimestamp: '', LastUpdatedBy: '' }
+    ];
+
+    // call loadDraft
+    store.loadDraft(trigger, relations as any[]);
+
+    // references should be preserved (in-place splice used)
+    expect(store.draft.inputArtifacts).toBe(inRef);
+    expect(store.draft.outputArtifacts).toBe(outRef);
+
+    // content should reflect relations
+    expect(store.draft.inputArtifacts.length).toBe(1);
+    expect(store.draft.inputArtifacts[0].id).toBe('a1');
+    expect(store.draft.outputArtifacts.length).toBe(2);
+    expect(store.draft.outputArtifacts.map((o: any) => o.id)).toEqual(['a2', 'a3']);
+    // crud mapping: Create/Update preserved
+    expect(store.draft.outputArtifacts.map((o: any) => o.crud)).toEqual(['Create', 'Update']);
+  });
 });

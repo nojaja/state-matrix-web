@@ -27,7 +27,7 @@
             @add-child="onAddChild"
             @delete="onDelete"
           @move="onMove"
-          @rename="onRename"
+          @edit-request="onEditRequest"
          />
       </div>
     </div>
@@ -37,7 +37,14 @@
       <div class="space-y-4">
          <div>
            <label class="block text-sm font-medium text-gray-700">名称</label>
-           <input v-model="editingName" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border" placeholder="カテゴリ名" />
+           <input
+             v-model="editingName"
+             type="text"
+             class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border"
+             placeholder="カテゴリ名"
+             @keydown.enter.prevent="confirmSave"
+             @keydown.esc.prevent="showModal = false"
+           />
          </div>
       </div>
       <template #footer>
@@ -62,6 +69,7 @@ const selectedId = ref<string | null>(null);
 const showModal = ref(false);
 const modalMode = ref<'create' | 'edit'>('create');
 const editingName = ref('');
+const editingId = ref<string | null>(null);
 const targetParentId = ref<string | null>(null);
 
 onMounted(() => {
@@ -104,6 +112,20 @@ function onAddChild(node: CategoryNode) {
 }
 
 /**
+ * 処理名: 編集要求ハンドラ
+ * @param node 編集対象の CategoryNode
+ *
+ * 処理概要: 編集モーダルを開き、既存名称を編集用フィールドへセットする
+ */
+function onEditRequest(node: CategoryNode) {
+  modalMode.value = 'edit';
+  editingId.value = node.ID;
+  editingName.value = node.Name;
+  targetParentId.value = node.ParentID ?? null;
+  showModal.value = true;
+}
+
+/**
  * 処理名: カテゴリ削除
  * @param node 削除対象の `CategoryNode`
  *
@@ -135,8 +157,13 @@ async function confirmSave() {
       Level: 0,
       Path: ''
     });
-  } 
-  
+  } else if (modalMode.value === 'edit' && editingId.value) {
+    const category = categoryStore.categories.find(c => c.ID === editingId.value);
+    if (category) {
+      await categoryStore.update({ ...category, Name: editingName.value });
+    }
+  }
+
   showModal.value = false;
 }
 
@@ -162,9 +189,11 @@ function onMove({ draggedId, targetId }: { draggedId: string; targetId: string }
  *
  * 処理概要: ストアの update を呼んで名称を永続化する
  */
-async function onRename({ id, name }: { id: string; name: string }) {
+async function _onRename({ id, name }: { id: string; name: string }) {
   const category = categoryStore.categories.find(c => c.ID === id);
   if (!category) return;
   await categoryStore.update({ ...category, Name: name });
 }
+// 参照用（ビルド時の未使用エラー回避）
+void _onRename;
 </script>
