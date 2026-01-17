@@ -54,5 +54,18 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
+      - name: Check GitHub Pages enabled
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            try {
+              await github.rest.repos.getPages({ owner, repo });
+              core.info('GitHub Pages is enabled for this repository.');
+            } catch (err) {
+              core.setFailed(`GitHub Pages is not enabled for ${owner}/${repo}. Enable it at https://github.com/${owner}/${repo}/settings/pages and retry.`);
+            }
+
       - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v4
