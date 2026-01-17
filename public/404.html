@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Not Found</title>
+    <meta name="robots" content="noindex">
+  </head>
+  <body>
+    <p>Page not found. Redirecting to app...</p>
+    <script>
+      (function(){
+        // Try relative index first, then fall back to repository-rooted index.
+        // Adjust `BASE_INDEX` if your app is served from a different subpath.
+        const BASE_INDEX = '/state-matrix-web/index.html';
+        function loadIndex(url){
+          return fetch(url, {cache: 'no-store'}).then(r => {
+            if (!r.ok) throw new Error('index fetch failed');
+            return r.text();
+          });
+        }
+        loadIndex('./index.html')
+          .catch(() => loadIndex(BASE_INDEX))
+          .then(html => {
+            document.open();
+            document.write(html);
+            document.close();
+          })
+          .catch(() => {
+            // As a last resort, do a location replace to repo root
+            location.replace('/state-matrix-web/');
+          });
+      })();
+    </script>
+  </body>
+</html>
