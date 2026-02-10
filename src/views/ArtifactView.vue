@@ -2,7 +2,9 @@
   <div class="space-y-6">
     <!-- Form Section -->
     <div class="bg-white p-6 rounded shadow">
-      <h2 class="text-lg font-bold mb-4">作成物管理</h2>
+      <h2 class="text-lg font-bold mb-4">作成物管理
+      <span v-if="viewTabBadge > 0" class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-600 text-white" :aria-label="`アーティファクトタブの競合 ${viewTabBadge} 件`" tabindex="0" @click.prevent="openFirstScopeConflict" @keydown.enter.prevent="openFirstScopeConflict" @keydown.space.prevent="openFirstScopeConflict">{{ viewTabBadge }}</span>
+      </h2>
       
       <CategorySelector :path="selectedCategoryPath" @open="openCategorySelector" />
 
@@ -52,7 +54,7 @@
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
           <tr v-for="item in artifacts" :key="item.ID">
-            <td class="px-6 py-4 whitespace-nowrap">{{ item.Name }}</td>
+            <td class="px-6 py-4 whitespace-nowrap">{{ item.Name }} <span v-if="projectStore.conflictData?.[projectStore.selectedProject || '']?.[item.ID]" class="ml-2 text-red-600">●</span></td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                  {{ getCategoryName(item.CategoryID) }}
             </td>
@@ -60,6 +62,7 @@
             <td class="px-6 py-4 text-sm text-gray-500 truncate max-w-xs">{{ item.Note }}</td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
               <button @click="onEdit(item)" class="text-indigo-600 hover:text-indigo-900 mr-2 bg-indigo-100 px-3 py-1 rounded-full">編集</button>
+              <button v-if="projectStore.conflictData?.[projectStore.selectedProject || '']?.[item.ID]" @click="openCompare(item.ID)" class="text-yellow-700 mr-2 bg-yellow-100 px-3 py-1 rounded-full">競合解消</button>
               <button @click="onDelete(item)" class="text-red-600 hover:text-red-900 bg-red-100 px-3 py-1 rounded-full">削除</button>
             </td>
           </tr>
@@ -71,19 +74,28 @@
     </div>
 
     <CategorySelectorModal v-model="showCategorySelector" @confirm="onCategorySelected" />
+    <ModalDialog v-model="showCompareModal" title="競合解消">
+      <ThreeWayCompareModal :keyId="compareKey || ''" />
+    </ModalDialog>
 
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
+import { useRoute } from 'vue-router';
+import RepositoryWorkerClient from '../lib/repositoryWorkerClient';
 import { useArtifactStore } from '../stores/artifactStore';
+import { useProjectStore } from '../stores/projectStore';
 import { useCategoryStore, type CategoryNode } from '../stores/categoryStore';
 import type { ArtifactType } from '../types/models';
 import CategorySelectorModal from '../components/common/CategorySelectorModal.vue';
 import CategorySelector from '../components/common/CategorySelector.vue';
+import ModalDialog from '../components/common/ModalDialog.vue'
+import ThreeWayCompareModal from '../components/common/ThreeWayCompareModal.vue'
 
 const artifactStore = useArtifactStore();
+const projectStore = useProjectStore();
 const categoryStore = useCategoryStore();
 
 const artifacts = computed(() => artifactStore.artifacts);
@@ -98,6 +110,44 @@ const selectedCategoryPath = computed(() => {
 const isValid = computed(() => form.Name && form.CategoryID);
 
 const showCategorySelector = ref(false);
+const showCompareModal = ref(false)
+const compareKey = ref<string | null>(null)
+const route = useRoute()
+
+const viewTabBadge = computed(() => {
+  const proj = projectStore.selectedProject
+  if (!proj) return 0
+  const map = projectStore.conflictData[proj] || {}
+  return Object.values(map).filter((c:any) => c && c.path && c.path.startsWith('Artifacts/')).length
+})
+
+function openFirstScopeConflict() {
+  const proj = projectStore.selectedProject
+  if (!proj) return
+  const map = projectStore.conflictData[proj] || {}
+  const firstKey = Object.keys(map).find(k => map[k] && map[k].path && map[k].path.startsWith('Artifacts/'))
+  if (firstKey) {
+    compareKey.value = firstKey
+    showCompareModal.value = true
+  }
+}
+
+watch(() => route.query.conflict, (q) => {
+  const v = q as string | undefined
+  if (v) {
+    compareKey.value = v
+    showCompareModal.value = true
+  }
+})
+
+/**
+ *
+ * @param key
+ */
+function openCompare(key: string) {
+  compareKey.value = key
+  showCompareModal.value = true
+}
 
 onMounted(() => {
     artifactStore.init();
@@ -164,7 +214,7 @@ async function onDelete(item: ArtifactType) {
  */
 async function onSubmit() {
   if(!isValid.value) return;
-
+  const existingId = form.ID || null
   if (isEditing.value) {
     const target = artifactStore.artifacts.find(i => i.ID === form.ID);
     if(target) {
@@ -185,6 +235,64 @@ async function onSubmit() {
     });
   }
   resetForm();
+
+  // Post-save: if this edit corresponded to a known conflict, attempt push then remove/sync
+  try {
+    const proj = projectStore.selectedProject
+    const idForLog = existingId || form.ID || 'unknown'
+    console.info(`同期後処理開始: project=${proj} id=${idForLog}`)
+    if (proj) {
+      try {
+        if (existingId) {
+          // try push path if available
+          try {
+            const entry = await projectStore.getConflictFor(proj, existingId)
+            const cfg = await projectStore.getRepoConfig(proj)
+            if (entry && entry.path && cfg) {
+              try {
+                const client = new RepositoryWorkerClient()
+                const projHandle = await projectStore.getProjectDirHandle(proj)
+                let localText: string | null = null
+                try {
+                  const fh = await projHandle.getFileHandle(entry.path)
+                  localText = await (await fh.getFile()).text()
+                } catch (_e) { localText = null }
+                if (localText != null) {
+                  const pushRes = await client.pushPathsToRemote(cfg, [{ path: entry.path, content: localText }])
+                  if (Array.isArray(pushRes) && pushRes.every(r => r.ok)) {
+                    await projectStore.removeConflict(existingId)
+                    console.info(`プッシュ成功・競合削除: id=${existingId}`)
+                    return
+                  }
+                }
+              } catch (e) {
+                console.error('pushPathsToRemote でエラー、syncProject にフォールバックします', e)
+              }
+            }
+          } catch (e) { console.error('競合取得エラー', e) }
+          // fallback
+          try {
+            await projectStore.removeConflict(existingId)
+            console.info(`競合削除成功: id=${existingId}`)
+          } catch (err) {
+            console.error(`競合削除失敗: id=${existingId}`, err)
+          }
+        }
+      } catch (err) {
+        console.error('競合処理中にエラー', err)
+      }
+      try {
+        await projectStore.syncProject(proj)
+        console.info(`同期成功: project=${proj}`)
+      } catch (err) {
+        console.error(`同期失敗: project=${proj}`, err)
+      }
+    } else {
+      console.info('プロジェクトが未選択のため同期をスキップしました')
+    }
+  } catch (e) {
+    console.error('同期後処理で予期せぬエラー', e)
+  }
 }
 
 /**
@@ -195,4 +303,6 @@ async function onSubmit() {
 function resetForm() {
   artifactStore.resetDraft();
 }
+
+// 競合解決ハンドラは未使用のため削除
 </script>

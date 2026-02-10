@@ -62,3 +62,30 @@ export const ENTITY_TYPES: EntityType[] = [
   'CausalRelationsTypes',
   'ProcessTypes'
 ];
+
+export type RepoConfig = {
+  provider: 'github' | 'gitlab'
+  owner: string
+  repository: string
+  branch: string
+  token?: string
+  lastSyncedCommitSha?: string | null
+}
+
+export interface RepoMetadata {
+  headSha: string | null
+  lastSyncedCommitSha: string | null
+  fetchedAt: string // ISO8601 timestamp
+  fileSummary: Array<{ path: string; sha: string }>
+}
+
+export interface ConflictTriple {
+  id: string | null
+  path: string
+  format: 'json' | 'yaml' | 'text'
+  base: string
+  local: string
+  remote: string
+  timestamp: string // ISO8601
+  metadata?: Record<string, any>
+}
