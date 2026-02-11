@@ -19,16 +19,18 @@
 import { computed } from 'vue'
 import ConflictFields from './ConflictFields.vue'
 import { useProjectStore } from '../../stores/projectStore'
+import { useMetadataStore } from '../../stores/metadataStore'
 import RepositoryWorkerClient from '../../lib/repositoryWorkerClient'
 
 const props = defineProps<{ keyId: string }>()
 const keyId = props.keyId
 const projectStore = useProjectStore()
+const metadataStore = useMetadataStore()
 
 const entry = computed(() => {
   const p = projectStore.selectedProject
   if (!p) return null
-  return projectStore.conflictData[p]?.[keyId] ?? null
+  return metadataStore.conflictData[p]?.[keyId] ?? null
 })
 
 /**
@@ -39,13 +41,13 @@ const entry = computed(() => {
  */
 async function pushThenSync(project: string, path: string, content: string) {
   const client = new RepositoryWorkerClient()
-  const cfg = projectStore.repoConfigs[project]
+  const cfg = await metadataStore.getRepoConfig(project)
   try {
     if (cfg) await client.pushPathsToRemote(cfg, [{ path, content }])
   } catch (_e) {
     // ignore push errors, we'll re-sync anyway
   }
-  await projectStore.syncProject(project)
+  await metadataStore.syncProject(project)
 }
 
 /**
@@ -55,15 +57,15 @@ async function applyLocal() {
   if (!keyId) return
   const p = projectStore.selectedProject
   if (!p) return
-  const e = projectStore.conflictData[p]?.[keyId]
+  const e = metadataStore.conflictData[p]?.[keyId]
   if (!e) return
   const content = e.local ?? ''
   try {
-    await projectStore.writeProjectFile(p, e.path, content)
+    await metadataStore.writeProjectFile(p, e.path, content)
   } catch (err) {
     console.error('write failed', err)
   }
-  await projectStore.removeConflict(keyId)
+  await metadataStore.removeConflict(p, keyId)
   await pushThenSync(p, e.path, content)
   alert('ローカルを適用しました')
 }
@@ -75,15 +77,15 @@ async function applyRemote() {
   if (!keyId) return
   const p = projectStore.selectedProject
   if (!p) return
-  const e = projectStore.conflictData[p]?.[keyId]
+  const e = metadataStore.conflictData[p]?.[keyId]
   if (!e) return
   const content = e.remote ?? ''
   try {
-    await projectStore.writeProjectFile(p, e.path, content)
+    await metadataStore.writeProjectFile(p, e.path, content)
   } catch (err) {
     console.error('write failed', err)
   }
-  await projectStore.removeConflict(keyId)
+  await metadataStore.removeConflict(p, keyId)
   await pushThenSync(p, e.path, content)
   alert('リモートを適用しました')
 }
@@ -96,7 +98,7 @@ async function applyManual() {
   if (!keyId) return
   const p = projectStore.selectedProject
   if (!p) return
-  await projectStore.syncProject(p)
+  await metadataStore.syncProject(p)
   alert('編集を保存しました')
 }
 </script>

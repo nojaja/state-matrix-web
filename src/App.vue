@@ -1,25 +1,92 @@
 <script setup lang="ts">
-import { computed, watch, onMounted } from 'vue'
+import { computed, watch, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useProjectStore } from './stores/projectStore'
+import { useMetadataStore } from './stores/metadataStore'
+import { useArtifactStore } from './stores/artifactStore'
+import { useCategoryStore } from './stores/categoryStore'
+import { useProcessStore } from './stores/processStore'
+import { useTriggerStore } from './stores/triggerStore'
+import { virtualFsManager } from './lib/virtualFsSingleton'
+import type { VirtualFsInstance } from './types/models'
 
 const projectStore = useProjectStore()
+const metadataStore = useMetadataStore()
+const artifactStore = useArtifactStore()
+const categoryStore = useCategoryStore()
+const processStore = useProcessStore()
+const triggerStore = useTriggerStore()
 const router = useRouter()
 
-// Ensure conflict data loaded when project selection changes
-watch(() => projectStore.selectedProject, async (p) => {
-  if (p) await projectStore.loadConflictData(p)
+// shared VirtualFsManager singleton (created in src/lib/virtualFsSingleton.ts)
+// const virtualFsManager is imported above
+
+// VirtualFS インスタンスを保持
+const virtualFsInstance = ref<VirtualFsInstance | null>(null)
+
+// badge計算キャッシュ（computed が無限ループしないように手動で管理）
+const badgeCache = ref({
+  project: 0,
+  process: 0,
+  artifact: 0,
+  trigger: 0,
+  category: 0,
+  lastUpdate: 0
 })
 
-onMounted(async () => {
-  if (projectStore.selectedProject) await projectStore.loadConflictData(projectStore.selectedProject)
-})
+/**
+ * 処理名: プロジェクト切替フロー
+ *
+ * 処理概要: VirtualFsManager でプロジェクトを開き、全ストアを初期化する
+ *
+ * 実装理由: VirtualFS ベースのアーキテクチャにより統一されたファイル管理を実現するため
+ */
+const switchProject = async (projectName: string | null) => {
+  if (!projectName) {
+    // 未選択時はクリア
+    virtualFsInstance.value = null
+    artifactStore.artifacts = []
+    categoryStore.categories = []
+    processStore.processes = []
+    triggerStore.triggers = []
+    triggerStore.relations = []
+    virtualFsManager.closeProject()
+    updateBadgeCache()
+    return
+  }
+
+  try {
+    const vfs = await virtualFsManager.openProject(projectName)
+    virtualFsInstance.value = vfs
+
+    // 全ストアを VirtualFS で初期化
+    artifactStore.initFromVirtualFS(vfs)
+    categoryStore.initFromVirtualFS(vfs)
+    processStore.initFromVirtualFS(vfs)
+    triggerStore.initFromVirtualFS(vfs)
+
+    // 並行して全ストアを初期化（fetchAll 呼び出し）
+    await Promise.all([
+      artifactStore.init(),
+      categoryStore.init(),
+      processStore.init(),
+      triggerStore.init()
+    ])
+
+    // メタデータ初期化
+    await metadataStore.loadConflictData(projectName)
+    updateBadgeCache()
+    
+  } catch (error) {
+    console.error('プロジェクト切替エラー:', error)
+  }
+}
 
 // Helper to count conflicts by path prefix
 function countByPrefixes(prefixes: string[]) {
   const proj = projectStore.selectedProject
   if (!proj) return 0
-  const map = projectStore.conflictData[proj] || {}
+  const map = metadataStore.conflictData[proj] || {}
   return Object.values(map).filter((c: any) => {
     if (!c || !c.path) return false
     for (const p of prefixes) if (c.path.startsWith(p)) return true
@@ -27,24 +94,57 @@ function countByPrefixes(prefixes: string[]) {
   }).length
 }
 
-const projectBadge = computed(() => {
+// badge計算を手動で更新（computed の無限ループを防ぐ）
+function updateBadgeCache() {
   const proj = projectStore.selectedProject
-  if (!proj) return 0
-  const map = projectStore.conflictData[proj] || {}
-  return Object.keys(map).length
+  if (!proj) {
+    badgeCache.value = { project: 0, process: 0, artifact: 0, trigger: 0, category: 0, lastUpdate: Date.now() }
+    return
+  }
+  
+  const map = metadataStore.conflictData[proj] || {}
+  badgeCache.value = {
+    project: Object.keys(map).length,
+    process: countByPrefixes(['ProcessTypes/', 'ProcessTypes']),
+    artifact: countByPrefixes(['ArtifactTypes/', 'ArtifactTypes']),
+    trigger: countByPrefixes(['ActionTriggerTypes/', 'ActionTriggerTypes']),
+    category: countByPrefixes(['CategoryMaster/', 'CategoryMaster']),
+    lastUpdate: Date.now()
+  }
+}
+
+// computed を使わず、キャッシュ値を直接参照（無限ループ防止）
+const projectBadge = computed(() => badgeCache.value.project)
+const processBadge = computed(() => badgeCache.value.process)
+const artifactBadge = computed(() => badgeCache.value.artifact)
+const triggerBadge = computed(() => badgeCache.value.trigger)
+const categoryBadge = computed(() => badgeCache.value.category)
+const roleBadge = computed(() => 0)
+
+// プロジェクト選択が変わったら切替フロー実行（watch停止関数を保持）
+const stopProjectWatch = watch(() => projectStore.selectedProject, (projectName) => {
+  // 非同期初期化をバックグラウンドで開始（初期描画を妨げない）
+  void switchProject(projectName)
 })
 
-const processBadge = computed(() => countByPrefixes(['ProcessTypes/', 'ProcessTypes']))
-const artifactBadge = computed(() => countByPrefixes(['ArtifactTypes/', 'ArtifactTypes']))
-const triggerBadge = computed(() => countByPrefixes(['ActionTriggerTypes/', 'ActionTriggerTypes']))
-const categoryBadge = computed(() => countByPrefixes(['CategoryMaster/', 'CategoryMaster']))
-const roleBadge = computed(() => 0)
+onMounted(() => {
+  if (projectStore.selectedProject) {
+    // バックグラウンドで初期化を開始し、初期描画をブロックしない
+    void switchProject(projectStore.selectedProject)
+  }
+})
+
+// コンポーネント破棄時にwatchをクリーンアップ（メモリリーク防止）
+onUnmounted(() => {
+  stopProjectWatch()
+  virtualFsManager.closeProject()
+})
 
 function openBadge(kind: string) {
   const proj = projectStore.selectedProject;
   if (!proj) return;
   // find first conflict id matching kind's prefixes
-  const conflicts = projectStore.conflictData[proj] || {};
+  const conflicts = metadataStore.conflictData[proj] || {};
   const prefixesMap: Record<string, string[]> = {
     project: ['ProjectData/'],
     process: ['ProcessTypes/'],

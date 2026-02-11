@@ -68,6 +68,7 @@ export type RepoConfig = {
   owner: string
   repository: string
   branch: string
+  host?: string
   token?: string
   lastSyncedCommitSha?: string | null
 }
@@ -88,4 +89,24 @@ export interface ConflictTriple {
   remote: string
   timestamp: string // ISO8601
   metadata?: Record<string, any>
+}
+
+/**
+ * VirtualFS インスタンスの型定義
+ * browser-git-ops ライブラリが提供する VirtualFS インターフェース
+ */
+export interface VirtualFsInstance {
+  init(): Promise<void>;
+  readFile(path: string): Promise<string>;
+  writeFile(path: string, content: string): Promise<void>;
+  readdir(path: string): Promise<string[]>;
+  unlink(path: string): Promise<void>;
+  mkdir?(path: string): Promise<void>;
+  rmdir?(path: string): Promise<void>;
+  stat?(path: string): Promise<any>;
+  getAdapter?(): Promise<{ type: string; opts?: Record<string, unknown> } | null>;
+  setAdapter?(input: { type: string; opts?: Record<string, unknown> }): Promise<void>;
+  // Conflict API: VirtualFS が管理する競合情報の取得と解決
+  getConflicts?(): Promise<ConflictTriple[]>;
+  resolveConflict?(path: string, resolution: 'local' | 'remote'): Promise<void>;
 }

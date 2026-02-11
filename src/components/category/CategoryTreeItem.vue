@@ -52,6 +52,7 @@ import { computed } from 'vue';
 import { Folder, Folder as FolderIcon, PlusCircle, Trash2, Edit2 } from 'lucide-vue-next';
 import type { CategoryNode } from '../../stores/categoryStore';
 import { useProjectStore } from '../../stores/projectStore'
+import { useMetadataStore } from '../../stores/metadataStore'
 
 const _props = defineProps<{
   node: CategoryNode;
@@ -64,10 +65,11 @@ const emit = defineEmits(['select', 'add-child', 'delete', 'move', 'edit-request
 const isSelected = computed(() => _props.node.ID === _props.selectedId);
 const hasChildren = computed(() => _props.node.children && _props.node.children.length > 0);
 const projectStore = useProjectStore()
+const metadataStore = useMetadataStore()
 const hasConflict = computed(() => {
   const p = projectStore.selectedProject
   if (!p) return false
-  const map = projectStore.conflictData[p] || {}
+  const map = metadataStore.conflictData[p] || {}
   return !!(map[_props.node.ID] || Object.values(map).find((v:any)=>v && v.id===_props.node.ID))
 })
 

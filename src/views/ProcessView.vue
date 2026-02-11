@@ -61,7 +61,7 @@
           <tr v-for="proc in processes" :key="proc.ID">
             <td class="px-6 py-4 whitespace-nowrap">
               {{ proc.Name }}
-              <span v-if="projectStore.conflictData?.[projectStore.selectedProject || '']?.[proc.ID]" class="ml-2 text-red-600">●</span>
+              <span v-if="metadataStore.conflictData?.[projectStore.selectedProject || '']?.[proc.ID]" class="ml-2 text-red-600">●</span>
             </td>
             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                  {{ getCategoryName(proc.CategoryID) }}
@@ -69,7 +69,7 @@
             <td class="px-6 py-4 text-sm text-gray-500">{{ proc.Description }}</td>
             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
               <button @click="onEdit(proc)" class="text-indigo-600 hover:text-indigo-900 mr-2 bg-indigo-100 px-3 py-1 rounded-full">編集</button>
-              <button v-if="projectStore.conflictData?.[projectStore.selectedProject || '']?.[proc.ID]" @click="openCompare(proc.ID)" class="text-yellow-700 mr-2 bg-yellow-100 px-3 py-1 rounded-full">競合解消</button>
+              <button v-if="metadataStore.conflictData?.[projectStore.selectedProject || '']?.[proc.ID]" @click="openCompare(proc.ID)" class="text-yellow-700 mr-2 bg-yellow-100 px-3 py-1 rounded-full">競合解消</button>
               <button @click="onDelete(proc)" class="text-red-600 hover:text-red-900 bg-red-100 px-3 py-1 rounded-full">削除</button>
             </td>
           </tr>
@@ -86,19 +86,20 @@
     </ModalDialog>
 
       <!-- Inline conflict field resolver for process edits -->
-      <div v-if="isEditing && projectStore.conflictData?.[projectStore.selectedProject || '']?.[form.ID]" class="mb-4 bg-yellow-50 p-3 rounded">
+      <div v-if="isEditing && metadataStore.conflictData?.[projectStore.selectedProject || '']?.[form.ID]" class="mb-4 bg-yellow-50 p-3 rounded">
         <ConflictFields :keyId="form.ID" />
       </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, onUnmounted } from 'vue';
 import { useRoute } from 'vue-router';
 import RepositoryWorkerClient from '../lib/repositoryWorkerClient';
 import { useProcessStore } from '../stores/processStore';
 import { useCategoryStore, type CategoryNode } from '../stores/categoryStore';
 import { useProjectStore } from '../stores/projectStore';
+import { useMetadataStore } from '../stores/metadataStore';
 import type { ProcessType } from '../types/models';
 import CategorySelectorModal from '../components/common/CategorySelectorModal.vue';
 import ModalDialog from '../components/common/ModalDialog.vue'
@@ -108,6 +109,7 @@ import ConflictFields from '../components/common/ConflictFields.vue'
 const processStore = useProcessStore();
 const categoryStore = useCategoryStore();
 const projectStore = useProjectStore();
+const metadataStore = useMetadataStore();
 
 const processes = computed(() => processStore.processes);
 const categoryMap = computed(() => categoryStore.getMap);
@@ -128,14 +130,14 @@ const route = useRoute()
 const viewTabBadge = computed(() => {
   const proj = projectStore.selectedProject
   if (!proj) return 0
-  const map = projectStore.conflictData[proj] || {}
+  const map = metadataStore.conflictData[proj] || {}
   return Object.values(map).filter((c:any) => c && c.path && c.path.startsWith('ProcessTypes/')).length
 })
 
 function openFirstScopeConflict() {
   const proj = projectStore.selectedProject
   if (!proj) return
-  const map = projectStore.conflictData[proj] || {}
+  const map = metadataStore.conflictData[proj] || {}
   const firstKey = Object.keys(map).find(k => map[k] && map[k].path && map[k].path.startsWith('ProcessTypes/'))
   if (firstKey) {
     compareKey.value = firstKey
@@ -143,12 +145,16 @@ function openFirstScopeConflict() {
   }
 }
 
-watch(() => route.query.conflict, (q) => {
+const stopConflictWatch = watch(() => route.query.conflict, (q) => {
   const v = q as string | undefined
   if (v) {
     compareKey.value = v
     showCompareModal.value = true
   }
+})
+
+onUnmounted(() => {
+  stopConflictWatch()
 })
 
 /**
@@ -250,58 +256,54 @@ async function onSubmit() {
   // Post-save: remove conflict and sync
   try {
     const proj = projectStore.selectedProject
-    const idForLog = isEditing.value && form.ID ? form.ID : 'new'
-    console.info(`同期後処理開始: project=${proj} id=${idForLog}`)
-    if (proj) {
-      // Attempt to push resolved path if conflict entry has a path
+    if (!proj) {
+      console.info('プロジェクトが未選択のため同期をスキップしました')
+      return
+    }
+    if (!isEditing.value || !form.ID) return
+
+    console.info(`同期後処理開始: project=${proj} id=${form.ID}`)
+    const entry = await metadataStore.getConflictFor(proj, form.ID)
+    if (!entry) return
+
+    const cfg = await metadataStore.getRepoConfig(proj)
+    if (entry.path && cfg) {
       try {
-        if (isEditing.value && form.ID) {
-          const entry = await projectStore.getConflictFor(proj, form.ID)
-          const cfg = await projectStore.getRepoConfig(proj)
-          if (entry && entry.path && cfg) {
-            try {
-              const client = new RepositoryWorkerClient()
-              // read local content
-              const projHandle = await projectStore.getProjectDirHandle(proj)
-              let localText: string | null = null
-              try {
-                const fh = await projHandle.getFileHandle(entry.path)
-                localText = await (await fh.getFile()).text()
-              } catch (_e) {
-                localText = null
-              }
-              if (localText != null) {
-                const pushRes = await client.pushPathsToRemote(cfg, [{ path: entry.path, content: localText }])
-                if (Array.isArray(pushRes) && pushRes.every(r => r.ok)) {
-                  // push succeeded -> remove conflict and return
-                  await projectStore.removeConflict(form.ID)
-                  console.info(`プッシュ成功・競合削除: id=${form.ID}`)
-                  return
-                }
-              }
-            } catch (e) {
-              console.error('pushPathsToRemote でエラー、syncProject にフォールバックします', e)
-            }
-          }
-          // fallback: remove conflict then sync
-          try {
-            await projectStore.removeConflict(form.ID)
-            console.info(`競合削除成功: id=${form.ID}`)
-          } catch (err) {
-            console.error(`競合削除失敗: id=${form.ID}`, err)
+        const client = new RepositoryWorkerClient()
+        // read local content
+        const projHandle = await metadataStore.getProjectDirHandle(proj)
+        let localText: string | null = null
+        try {
+          const fh = await projHandle.getFileHandle(entry.path)
+          localText = await (await fh.getFile()).text()
+        } catch (_e) {
+          localText = null
+        }
+        if (localText != null) {
+          const pushRes = await client.pushPathsToRemote(cfg, [{ path: entry.path, content: localText }])
+          if (Array.isArray(pushRes) && pushRes.every(r => r.ok)) {
+            // push succeeded -> remove conflict and return
+            await metadataStore.removeConflict(proj, form.ID)
+            console.info(`プッシュ成功・競合削除: id=${form.ID}`)
+            return
           }
         }
-      } catch (err) {
-        console.error('競合処理中にエラー', err)
+      } catch (e) {
+        console.error('pushPathsToRemote でエラー、syncProject にフォールバックします', e)
       }
-      try {
-        await projectStore.syncProject(proj)
-        console.info(`同期成功: project=${proj}`)
-      } catch (err) {
-        console.error(`同期失敗: project=${proj}`, err)
-      }
-    } else {
-      console.info('プロジェクトが未選択のため同期をスキップしました')
+    }
+
+    try {
+      await metadataStore.removeConflict(proj, form.ID)
+      console.info(`競合削除成功: id=${form.ID}`)
+    } catch (err) {
+      console.error(`競合削除失敗: id=${form.ID}`, err)
+    }
+    try {
+      await metadataStore.syncProject(proj)
+      console.info(`同期成功: project=${proj}`)
+    } catch (err) {
+      console.error(`同期失敗: project=${proj}`, err)
     }
   } catch (e) {
     console.error('同期後処理で予期せぬエラー', e)

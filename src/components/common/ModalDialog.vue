@@ -24,10 +24,20 @@
 </template>
 
 <script setup lang="ts">
+/**
+ * ModalDialog コンポーネント
+ * - modelValue: ダイアログ表示状態
+ * - title: ダイアログタイトル
+ */
 defineProps<{
   modelValue: boolean;
   title: string;
 }>();
 
-defineEmits(['update:modelValue'] as const);
+/**
+ * ダイアログ表示状態変更イベント
+ */
+defineEmits<{
+  'update:modelValue': [value: boolean];
+}>();
 </script>

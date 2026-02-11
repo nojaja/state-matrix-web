@@ -54,15 +54,17 @@
 <script setup lang="ts">
 import { ref, computed, watchEffect } from 'vue'
 import { useProjectStore } from '../../stores/projectStore'
+import { useMetadataStore } from '../../stores/metadataStore'
 import RepositoryWorkerClient from '../../lib/repositoryWorkerClient'
 
 const props = defineProps<{ keyId: string }>()
 const projectStore = useProjectStore()
+const metadataStore = useMetadataStore()
 
 const entry = computed(() => {
   const p = projectStore.selectedProject
   if (!p) return null
-  return projectStore.conflictData?.[p]?.[props.keyId] ?? null
+  return metadataStore.conflictData?.[p]?.[props.keyId] ?? null
 })
 
 const edited = ref('')
@@ -77,16 +79,16 @@ watchEffect(() => {
  */
 async function pushThenSync(project: string, path: string, content: string) {
   const client = new RepositoryWorkerClient()
-  const cfg = projectStore.repoConfigs[project]
+  const cfg = await metadataStore.getRepoConfig(project)
   try {
     if (cfg) {
       await client.pushPathsToRemote(cfg, [{ path, content }])
-      await projectStore.syncProject(project)
+      await metadataStore.syncProject(project)
     } else {
-      await projectStore.syncProject(project)
+      await metadataStore.syncProject(project)
     }
   } catch (_e) {
-    await projectStore.syncProject(project)
+    await metadataStore.syncProject(project)
   }
 }
 
@@ -94,15 +96,15 @@ async function applyLocal() {
   if (!props.keyId) return
   const p = projectStore.selectedProject
   if (!p) return
-  const e = projectStore.conflictData?.[p]?.[props.keyId]
+  const e = metadataStore.conflictData?.[p]?.[props.keyId]
   if (!e) return
   const content = e.local ?? ''
   try {
-    await projectStore.writeProjectFile(p, e.path, content)
+    await metadataStore.writeProjectFile(p, e.path, content)
   } catch (err) {
     console.error('write failed', err)
   }
-  await projectStore.removeConflict(props.keyId)
+  await metadataStore.removeConflict(p, props.keyId)
   await pushThenSync(p, e.path, content)
 }
 
@@ -110,15 +112,15 @@ async function applyRemote() {
   if (!props.keyId) return
   const p = projectStore.selectedProject
   if (!p) return
-  const e = projectStore.conflictData?.[p]?.[props.keyId]
+  const e = metadataStore.conflictData?.[p]?.[props.keyId]
   if (!e) return
   const content = e.remote ?? ''
   try {
-    await projectStore.writeProjectFile(p, e.path, content)
+    await metadataStore.writeProjectFile(p, e.path, content)
   } catch (err) {
     console.error('write failed', err)
   }
-  await projectStore.removeConflict(props.keyId)
+  await metadataStore.removeConflict(p, props.keyId)
   await pushThenSync(p, e.path, content)
 }
 
@@ -126,14 +128,14 @@ async function applyManual() {
   if (!props.keyId) return
   const p = projectStore.selectedProject
   if (!p) return
-  const e = projectStore.conflictData?.[p]?.[props.keyId]
+  const e = metadataStore.conflictData?.[p]?.[props.keyId]
   if (!e) return
   try {
-    await projectStore.writeProjectFile(p, e.path, edited.value)
+    await metadataStore.writeProjectFile(p, e.path, edited.value)
   } catch (err) {
     console.error('write failed', err)
   }
-  await projectStore.removeConflict(props.keyId)
+  await metadataStore.removeConflict(p, props.keyId)
   await pushThenSync(p, e.path, edited.value)
 }
 
@@ -141,21 +143,21 @@ const project = computed(() => projectStore.selectedProject)
 const conflicts = computed(() => {
   const p = project.value
   if (!p) return {}
-  return projectStore.conflictData?.[p] || {}
+  return metadataStore.conflictData?.[p] || {}
 })
 
 async function resolveAsLocal(key: string) {
   try {
     const project = projectStore.selectedProject
     if (!project) throw new Error('no project')
-    const entry = projectStore.conflictData?.[project]?.[key]
+    const entry = metadataStore.conflictData?.[project]?.[key]
     const content = entry?.local ?? ''
-    await projectStore.writeProjectFile(project, entry?.path || '', content)
-    await projectStore.removeConflict(key)
+    await metadataStore.writeProjectFile(project, entry?.path || '', content)
+    await metadataStore.removeConflict(project, key)
     const client = new RepositoryWorkerClient()
-    const cfg = projectStore.repoConfigs[project]
-    if (cfg) await client.pushPathsToRemote(cfg, [{ path: entry?.path || '', content }])
-    await projectStore.syncProject(project)
+      const cfg = await metadataStore.getRepoConfig(project)
+      if (cfg) await client.pushPathsToRemote(cfg, [{ path: entry?.path || '', content }])
+    await metadataStore.syncProject(project)
     alert('ローカルを適用して競合を削除しました')
   } catch (e) {
     console.error(e)
@@ -167,14 +169,14 @@ async function resolveAsRemote(key: string) {
   try {
     const project = projectStore.selectedProject
     if (!project) throw new Error('no project')
-    const entry = projectStore.conflictData?.[project]?.[key]
+    const entry = metadataStore.conflictData?.[project]?.[key]
     const content = entry?.remote ?? ''
-    await projectStore.writeProjectFile(project, entry?.path || '', content)
-    await projectStore.removeConflict(key)
+    await metadataStore.writeProjectFile(project, entry?.path || '', content)
+    await metadataStore.removeConflict(project, key)
     const client = new RepositoryWorkerClient()
-    const cfg = projectStore.repoConfigs[project]
+    const cfg = await metadataStore.getRepoConfig(project)
     if (cfg) await client.pushPathsToRemote(cfg, [{ path: entry?.path || '', content }])
-    await projectStore.syncProject(project)
+    await metadataStore.syncProject(project)
     alert('リモートを適用して競合を削除しました')
   } catch (e) {
     console.error(e)

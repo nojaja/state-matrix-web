@@ -1,4 +1,4 @@
-import type { ConflictTriple } from '../stores/projectStore'
+import type { ConflictTriple } from '../stores/metadataStore'
 import { load as yamlLoad } from 'js-yaml'
 
 type FileTriple = {

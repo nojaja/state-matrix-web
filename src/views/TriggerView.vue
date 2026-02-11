@@ -139,13 +139,13 @@
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
           <tr v-for="t in triggers" :key="t.ID">
-             <td class="px-6 py-4 whitespace-nowrap">{{ t.Name }} <span v-if="projectStore.conflictData?.[projectStore.selectedProject || '']?.[t.ID]" class="ml-2 text-red-600">●</span></td>
+             <td class="px-6 py-4 whitespace-nowrap">{{ t.Name }} <span v-if="metadataStore.conflictData?.[projectStore.selectedProject || '']?.[t.ID]" class="ml-2 text-red-600">●</span></td>
              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ getCategoryName(t.CategoryID) }}</td>
              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ getProcessName(t.ProcessTypeID) }}</td>
              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ t.Timing }}</td>
              <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                <button @click="onEdit(t)" class="text-indigo-600 hover:text-indigo-900 mr-2 bg-indigo-100 px-3 py-1 rounded-full">編集</button>
-               <button v-if="projectStore.conflictData?.[projectStore.selectedProject || '']?.[t.ID]" @click="openCompare(t.ID)" class="text-yellow-700 mr-2 bg-yellow-100 px-3 py-1 rounded-full">競合解消</button>
+               <button v-if="metadataStore.conflictData?.[projectStore.selectedProject || '']?.[t.ID]" @click="openCompare(t.ID)" class="text-yellow-700 mr-2 bg-yellow-100 px-3 py-1 rounded-full">競合解消</button>
                <button @click="onDelete(t)" class="text-red-600 hover:text-red-900 bg-red-100 px-3 py-1 rounded-full">削除</button>
              </td>
           </tr>
@@ -177,11 +177,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, onUnmounted } from 'vue';
 import { useRoute } from 'vue-router';
 import RepositoryWorkerClient from '../lib/repositoryWorkerClient';
 import { useTriggerStore } from '../stores/triggerStore';
 import { useProjectStore } from '../stores/projectStore';
+import { useMetadataStore } from '../stores/metadataStore';
 import { useCategoryStore, type CategoryNode } from '../stores/categoryStore';
 import { useProcessStore } from '../stores/processStore';
 import { useArtifactStore } from '../stores/artifactStore';
@@ -194,6 +195,7 @@ import ThreeWayCompareModal from '../components/common/ThreeWayCompareModal.vue'
 
 const triggerStore = useTriggerStore();
 const projectStore = useProjectStore();
+const metadataStore = useMetadataStore();
 const categoryStore = useCategoryStore();
 const processStore = useProcessStore();
 const artifactStore = useArtifactStore();
@@ -225,14 +227,14 @@ const route = useRoute()
 const viewTabBadge = computed(() => {
   const proj = projectStore.selectedProject
   if (!proj) return 0
-  const map = projectStore.conflictData[proj] || {}
+  const map = metadataStore.conflictData[proj] || {}
   return Object.values(map).filter((c:any) => c && c.path && c.path.startsWith('ActionTriggerTypes/')).length
 })
 
 function openFirstScopeConflict() {
   const proj = projectStore.selectedProject
   if (!proj) return
-  const map = projectStore.conflictData[proj] || {}
+  const map = metadataStore.conflictData[proj] || {}
   const firstKey = Object.keys(map).find(k => map[k] && map[k].path && map[k].path.startsWith('ActionTriggerTypes/'))
   if (firstKey) {
     compareKey.value = firstKey
@@ -240,12 +242,16 @@ function openFirstScopeConflict() {
   }
 }
 
-watch(() => route.query.conflict, (q) => {
+const stopConflictWatch = watch(() => route.query.conflict, (q) => {
   const v = q as string | undefined
   if (v) {
     compareKey.value = v
     showCompareModal.value = true
   }
+})
+
+onUnmounted(() => {
+  stopConflictWatch()
 })
 
 /**
@@ -407,54 +413,52 @@ async function onSubmit() {
     // Post-save: attempt push then remove/sync
     try {
       const proj = projectStore.selectedProject
-      const idForLog = isEditing.value && form.ID ? form.ID : 'new'
-      console.info(`同期後処理開始: project=${proj} id=${idForLog}`)
-      if (proj) {
+      if (!proj) {
+        console.info('プロジェクトが未選択のため同期をスキップしました')
+        return
+      }
+      if (!isEditing.value || !form.ID) return
+
+      console.info(`同期後処理開始: project=${proj} id=${form.ID}`)
+      const entry = await metadataStore.getConflictFor(proj, form.ID)
+      if (!entry) return
+
+      const cfg = await metadataStore.getRepoConfig(proj)
+      if (entry.path && cfg) {
         try {
-          if (isEditing.value && form.ID) {
-            try {
-              const entry = await projectStore.getConflictFor(proj, form.ID)
-              const cfg = await projectStore.getRepoConfig(proj)
-              if (entry && entry.path && cfg) {
-                try {
-                  const client = new RepositoryWorkerClient()
-                  const projHandle = await projectStore.getProjectDirHandle(proj)
-                  let localText: string | null = null
-                  try {
-                    const fh = await projHandle.getFileHandle(entry.path)
-                    localText = await (await fh.getFile()).text()
-                  } catch (_e) { localText = null }
-                  if (localText != null) {
-                    const pushRes = await client.pushPathsToRemote(cfg, [{ path: entry.path, content: localText }])
-                    if (Array.isArray(pushRes) && pushRes.every(r => r.ok)) {
-                      await projectStore.removeConflict(form.ID)
-                      console.info(`プッシュ成功・競合削除: id=${form.ID}`)
-                      return
-                    }
-                  }
-                } catch (e) {
-                  console.error('pushPathsToRemote でエラー、syncProject にフォールバックします', e)
-                }
-              }
-            } catch (e) { console.error('競合取得エラー', e) }
-            try {
-              await projectStore.removeConflict(form.ID)
-              console.info(`競合削除成功: id=${form.ID}`)
-            } catch (err) {
-              console.error(`競合削除失敗: id=${form.ID}`, err)
+          const client = new RepositoryWorkerClient()
+          const projHandle = await metadataStore.getProjectDirHandle(proj)
+          let localText: string | null = null
+          try {
+            const fh = await projHandle.getFileHandle(entry.path)
+            localText = await (await fh.getFile()).text()
+          } catch (_e) {
+            localText = null
+          }
+          if (localText != null) {
+            const pushRes = await client.pushPathsToRemote(cfg, [{ path: entry.path, content: localText }])
+            if (Array.isArray(pushRes) && pushRes.every(r => r.ok)) {
+              await metadataStore.removeConflict(proj, form.ID)
+              console.info(`プッシュ成功・競合削除: id=${form.ID}`)
+              return
             }
           }
-        } catch (err) {
-          console.error('競合処理中にエラー', err)
+        } catch (e) {
+          console.error('pushPathsToRemote でエラー、syncProject にフォールバックします', e)
         }
-        try {
-          await projectStore.syncProject(proj)
-          console.info(`同期成功: project=${proj}`)
-        } catch (err) {
-          console.error(`同期失敗: project=${proj}`, err)
-        }
-      } else {
-        console.info('プロジェクトが未選択のため同期をスキップしました')
+      }
+
+      try {
+        await metadataStore.removeConflict(proj, form.ID)
+        console.info(`競合削除成功: id=${form.ID}`)
+      } catch (err) {
+        console.error(`競合削除失敗: id=${form.ID}`, err)
+      }
+      try {
+        await metadataStore.syncProject(proj)
+        console.info(`同期成功: project=${proj}`)
+      } catch (err) {
+        console.error(`同期失敗: project=${proj}`, err)
       }
     } catch (e) {
       console.error('同期後処理で予期せぬエラー', e)

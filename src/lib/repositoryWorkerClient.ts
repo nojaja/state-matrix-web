@@ -1,5 +1,5 @@
-import * as WorkerModule from '../workers/RepositoryWorker'
 import repoSync from './repoSync'
+import { virtualFsManager } from './virtualFsSingleton'
 
 type FileTriple = { path: string; base: string | null; local: string | null; remote: string | null }
 
@@ -10,7 +10,7 @@ type Fetcher = (input: RequestInfo, init?: RequestInit) => Promise<Response>
  */
 export class RepositoryWorkerClient {
   fetcher: Fetcher
-  private worker: Worker | null = null
+  // transient workers are created per-call; no persistent worker field
 
   /**
    *
@@ -24,17 +24,7 @@ export class RepositoryWorkerClient {
   /**
    *
    */
-  private createWorkerIfAvailable() {
-    if (this.worker) return
-    try {
-      const W = (globalThis as any).Worker
-      if (typeof W === 'function') {
-        this.worker = new W('../workers/RepositoryWorker.js', { type: 'module' })
-      }
-    } catch (_e) {
-      this.worker = null
-    }
-  }
+  // no persistent worker: threeway creates a transient Worker per-call
 
   /**
    *
@@ -42,7 +32,8 @@ export class RepositoryWorkerClient {
    */
   async fetchRemoteTree(_cfg: any): Promise<{ headSha: string | null; files: { path: string; sha: string }[] }> {
     try {
-      const r = await WorkerModule.fetchRemoteTree(_cfg)
+      const mod: any = await import('../workers/RepositoryWorker')
+      const r = await mod.fetchRemoteTree(_cfg)
       return r.result || { headSha: null, files: [] }
     } catch (_e) {
       return { headSha: null, files: [] }
@@ -55,35 +46,56 @@ export class RepositoryWorkerClient {
    * @param triples
    */
   async threeway(triples: FileTriple[]) {
-    this.createWorkerIfAvailable()
-    if (!this.worker) {
-      const rAny: any = await WorkerModule.threeway(triples)
+    // Prefer using a transient Worker per-call to avoid leaking workers/event listeners
+    const WorkerCtor = (globalThis as any).Worker
+    if (typeof WorkerCtor !== 'function') {
+      // fallback to direct module call (dynamic import to avoid executing worker top-level code in window)
+      const mod: any = await import('../workers/RepositoryWorker')
+      const rAny: any = await mod.threeway(triples)
       if (rAny.ok) return rAny.result
       throw new Error(rAny.error || 'worker error')
     }
 
     return await new Promise<any>((resolve, reject) => {
-      const w = this.worker!
-      /**
-       *
-       * @param ev
-       */
+      const w = new WorkerCtor('../workers/RepositoryWorker.js', { type: 'module' })
+      let finished = false
+      const timeoutId = setTimeout(() => {
+        if (finished) return
+        finished = true
+        try { w.terminate() } catch (_e) {}
+        try {
+          const res = repoSync.threeway(triples)
+          resolve(res)
+        } catch (e) {
+          reject(e)
+        }
+      }, 2000)
+
       const onmsg = (ev: MessageEvent) => {
+        if (finished) return
         const msg = ev.data
         if (msg.type === 'threeway:result') {
-          w.removeEventListener('message', onmsg)
+          finished = true
+          clearTimeout(timeoutId)
+          try { w.removeEventListener('message', onmsg) } catch (_e) {}
+          try { w.terminate() } catch (_e) {}
           resolve({ resolved: msg.resolved, conflicts: msg.conflicts })
         } else if (msg.type === 'error') {
-          w.removeEventListener('message', onmsg)
+          finished = true
+          clearTimeout(timeoutId)
+          try { w.removeEventListener('message', onmsg) } catch (_e) {}
+          try { w.terminate() } catch (_e) {}
           reject(new Error(msg.message || 'worker error'))
         }
       }
+
       w.addEventListener('message', onmsg)
-      w.postMessage({ type: 'threeway', triples })
-      setTimeout(() => {
-        try { w.removeEventListener('message', onmsg) } catch (_e) {}
-        try { resolve(repoSync.threeway(triples)) } catch (e) { reject(e) }
-      }, 2000)
+      try { w.postMessage({ type: 'threeway', triples }) } catch (e) {
+        finished = true
+        clearTimeout(timeoutId)
+        try { w.terminate() } catch (_e) {}
+        reject(e)
+      }
     })
   }
 
@@ -102,106 +114,53 @@ export class RepositoryWorkerClient {
    * @param paths
    */
   async pushPathsToRemote(_cfg: any, paths: { path: string; content: string }[]): Promise<{ path: string; ok: boolean; message?: string }[]> {
+    // Delegate push to VirtualFS when available. This writes files into VFS and then triggers VFS.push
     const filtered = paths.filter(p => !p.path.startsWith('.repo-'))
     const results: { path: string; ok: boolean; message?: string }[] = []
-    const cfg = _cfg || {}
-    const token = cfg.token
 
-    /**
-     *
-     * @param ms
-     */
-    const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms))
+    try {
+      const vfs: any = virtualFsManager.getCurrentVfs()
+      if (!vfs) throw new Error('VirtualFS is not available')
 
-    /**
-     *
-     * @param url
-     * @param init
-     * @param attempts
-     */
-    const requestWithRetries = async (url: RequestInfo, init?: RequestInit, attempts = 3) => {
-      let lastErr: any = null
-      for (let i = 0; i < attempts; i++) {
+      // write files into VFS workspace
+      for (const p of filtered) {
         try {
-          const r = await this.fetcher(url, init)
-          if (r.ok) return r
-          if (r.status >= 500 && i < attempts - 1) { await sleep(200 * Math.pow(2, i)); continue }
-          return r
-        } catch (e) { lastErr = e; if (i < attempts - 1) await sleep(200 * Math.pow(2, i)) }
-      }
-      throw lastErr || new Error('request failed')
-    }
-
-    /**
-     *
-     * @param s
-     */
-    const encodeBase64 = (s: string) => {
-      if (typeof (globalThis as any).btoa === 'function') return (globalThis as any).btoa(unescape(encodeURIComponent(s)))
-      const NodeBuffer = (globalThis as any).Buffer
-      if (NodeBuffer) return NodeBuffer.from(s).toString('base64')
-      throw new Error('no base64 encoder available')
-    }
-
-    for (const p of filtered) {
-      try {
-        if (!cfg.provider) throw new Error('provider not configured')
-        if (cfg.provider === 'github') {
-          if (!token) throw new Error('token required for github')
-          const owner = cfg.owner; const repo = cfg.repository; const branch = cfg.branch || 'main'
-          const branchUrl = `https://api.github.com/repos/${owner}/${repo}/branches/${encodeURIComponent(branch)}`
-          const branchRes = await requestWithRetries(branchUrl, { headers: { Authorization: token.startsWith('ghp') || token.startsWith('token ') ? `token ${token.replace(/^token\\s*/,'')}` : `Bearer ${token}` } }, 2)
-          if (!branchRes.ok) {
-            const txt = await branchRes.text().catch(() => '')
-            if (branchRes.status === 404) { results.push({ path: p.path, ok: false, message: `github branch missing (needsInit): ${branchRes.status} ${txt}` }); continue }
-            results.push({ path: p.path, ok: false, message: `github branch check failed: ${branchRes.status} ${txt}` }); continue
-          }
-
-          const url = `https://api.github.com/repos/${owner}/${repo}/contents/${encodeURIComponent(p.path)}`
-          const getRes = await requestWithRetries(url + `?ref=${encodeURIComponent(branch)}`, undefined, 2)
-          let sha: string | undefined = undefined
-          if (getRes.ok) { const j = await getRes.json().catch(() => ({})); sha = j.sha }
-
-          const body: any = { message: `update ${p.path}`, content: typeof p.content === 'string' ? encodeBase64(p.content) : '', branch }
-          if (sha) body.sha = sha
-
-          const putRes = await requestWithRetries(url, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: (token.startsWith('ghp') || token.startsWith('token ')) ? `token ${token.replace(/^token\\s*/,'')}` : `Bearer ${token}` }, body: JSON.stringify(body) }, 3)
-          if (!putRes.ok) {
-            const text = await putRes.text().catch(() => '')
-            if ((putRes.status === 409 || putRes.status === 422) && !body._retried) {
-              const fresh = await requestWithRetries(url + `?ref=${encodeURIComponent(branch)}`, undefined, 2)
-              if (fresh.ok) { const j = await fresh.json().catch(() => ({})); if (j && j.sha) { body.sha = j.sha; body._retried = true; const retryRes = await requestWithRetries(url, { method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: (token.startsWith('ghp') || token.startsWith('token ')) ? `token ${token.replace(/^token\\s*/,'')}` : `Bearer ${token}` }, body: JSON.stringify(body) }, 2); if (retryRes.ok) { results.push({ path: p.path, ok: true }); continue } } }
-            }
-            if (putRes.status === 409 || putRes.status === 422) results.push({ path: p.path, ok: false, message: `github conflict or precondition failed: ${putRes.status} ${text}` })
-            else results.push({ path: p.path, ok: false, message: `github error: ${putRes.status} ${text}` })
-            continue
-          }
+          if (typeof vfs.writeFile !== 'function') throw new Error('VirtualFS.writeFile is not available')
+          await vfs.writeFile(p.path, p.content ?? '')
           results.push({ path: p.path, ok: true })
-        } else if (cfg.provider === 'gitlab') {
-          if (!token) throw new Error('token required for gitlab')
-          const owner = cfg.owner; const repo = cfg.repository; const branch = cfg.branch || 'main'
-          const project = encodeURIComponent(`${owner}/${repo}`)
-          const filePath = encodeURIComponent(p.path)
-          const baseUrl = `https://gitlab.com/api/v4/projects/${project}/repository/files/${filePath}`
-          const branchCheck = `https://gitlab.com/api/v4/projects/${project}/repository/branches/${encodeURIComponent(branch)}`
-          const bres = await requestWithRetries(branchCheck, { headers: { 'PRIVATE-TOKEN': token } }, 2)
-          if (!bres.ok) { const txt = await bres.text().catch(() => ''); if (bres.status === 404) { results.push({ path: p.path, ok: false, message: `gitlab branch check failed (needsInit): ${bres.status} ${txt}` }); continue } results.push({ path: p.path, ok: false, message: `gitlab branch check failed: ${bres.status} ${txt}` }); continue }
-          const getRes = await requestWithRetries(baseUrl + `?ref=${encodeURIComponent(branch)}`, { headers: { 'PRIVATE-TOKEN': token } }, 2)
-          const body = { branch, content: p.content ?? '', commit_message: `update ${p.path}` }
-          let res
-          if (getRes.ok) res = await requestWithRetries(baseUrl, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'PRIVATE-TOKEN': token }, body: JSON.stringify(body) }, 3)
-          else res = await requestWithRetries(baseUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', 'PRIVATE-TOKEN': token }, body: JSON.stringify(body) }, 3)
-          if (!res.ok) { const text = await res.text().catch(() => ''); results.push({ path: p.path, ok: false, message: `gitlab error: ${res.status} ${text}` }); continue }
-          results.push({ path: p.path, ok: true })
-        } else {
-          throw new Error('unknown provider')
+        } catch (e: any) {
+          results.push({ path: p.path, ok: false, message: String(e && e.message ? e.message : e) })
         }
-      } catch (e: any) {
-        results.push({ path: p.path, ok: false, message: String(e && e.message ? e.message : e) })
       }
+
+      // If VFS supports push flow, collect changes and push
+      if (typeof vfs.getChangeSet === 'function' && typeof vfs.push === 'function') {
+        try {
+          const changes = await vfs.getChangeSet()
+          if (Array.isArray(changes) && changes.length > 0) {
+            const idx = (typeof vfs.getIndex === 'function') ? await vfs.getIndex().catch(() => null) : null
+            const parentSha = idx?.head ?? null
+            const pushRes = await vfs.push({ parentSha, message: 'UI push', changes }).catch((e: any) => ({ ok: false, error: String(e && e.message ? e.message : e) }))
+            if (!pushRes || pushRes.ok === false) {
+              const msg = pushRes && (pushRes.error || pushRes.message) ? String(pushRes.error || pushRes.message) : 'vfs.push failed'
+              // mark written files as failed at push stage
+              return filtered.map(p => ({ path: p.path, ok: false, message: msg }))
+            }
+          }
+        } catch (e: any) {
+          const msg = String(e && e.message ? e.message : e)
+          return filtered.map(p => ({ path: p.path, ok: false, message: `vfs push error: ${msg}` }))
+        }
+      }
+
+      // Prepend excluded entries for .repo-
+      for (const p of paths) { if (p.path.startsWith('.repo-')) results.unshift({ path: p.path, ok: false, message: 'excluded from push' }) }
+      return results
+    } catch (e: any) {
+      // fallback: return error per path
+      const msg = String(e && e.message ? e.message : e)
+      return filtered.map(p => ({ path: p.path, ok: false, message: msg }))
     }
-    for (const p of paths) { if (p.path.startsWith('.repo-')) results.unshift({ path: p.path, ok: false, message: 'excluded from push' }) }
-    return results
   }
 }
 

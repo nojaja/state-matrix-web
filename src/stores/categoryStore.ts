@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
-import { CategoryRepository } from '../repositories';
-import type { CategoryMaster } from '../types/models';
+import { createRepositories } from '../repositories';
+import type { CategoryMaster, VirtualFsInstance } from '../types/models';
 import { generateUUID } from '../lib/uuid';
 
 export interface CategoryNode extends CategoryMaster {
@@ -30,6 +30,7 @@ export const useCategoryStore = defineStore('category', {
     categories: [] as CategoryMaster[],
     loading: false,
     initialized: false,
+    _categoryRepository: null as any
   }),
   getters: {
     /**
@@ -97,14 +98,28 @@ export const useCategoryStore = defineStore('category', {
   },
   actions: {
     /**
+     * 処理名: VirtualFS から初期化
+     *
+     * 処理概要: プロジェクト選択時に VirtualFS インスタンスを受け取り、リポジトリを初期化する
+     *
+     * 実装理由: プロジェクト単位のリポジトリ分離を実現するため
+     * @param vfs VirtualFsInstance（オープン済み）
+     */
+    initFromVirtualFS(vfs: VirtualFsInstance) {
+      const repos = createRepositories(vfs);
+      this._categoryRepository = repos.categoryRepository;
+      this.initialized = false;  // リセット
+    },
+
+    /**
      * 処理名: 初期化
      *
-     * 処理概要: データをロードしてストアを初期化する
+     * 処理概要: initFromVirtualFS 後にデータをロードしてストアを初期化する
      *
      * 実装理由: 初回アクセス時のセットアップを行うため
      */
     async init() {
-      if (this.initialized) return;
+      if (this.initialized || !this._categoryRepository) return;
       await this.fetchAll();
       this.initialized = true;
       
@@ -123,7 +138,7 @@ export const useCategoryStore = defineStore('category', {
     async fetchAll() {
       this.loading = true;
       try {
-        this.categories = await CategoryRepository.getAll();
+        this.categories = await this._categoryRepository.getAll();
       } finally {
         this.loading = false;
       }
@@ -141,7 +156,7 @@ export const useCategoryStore = defineStore('category', {
         ID: generateUUID(),
         ...partial
       };
-      await CategoryRepository.save(newCat);
+      await this._categoryRepository.save(newCat);
       await this.fetchAll();
     },
     /**
@@ -153,7 +168,7 @@ export const useCategoryStore = defineStore('category', {
       * @param category 更新対象の `CategoryMaster` オブジェクト
      */
     async update(category: CategoryMaster) {
-      await CategoryRepository.save(category);
+      await this._categoryRepository.save(category);
       await this.fetchAll();
     },
     /**
@@ -166,7 +181,7 @@ export const useCategoryStore = defineStore('category', {
      */
     async remove(id: string) {
       // 子要素チェックなどはアプリロジックでやるべきだが、ここでは単純削除
-      await CategoryRepository.delete(id);
+      await this._categoryRepository.delete(id);
       await this.fetchAll();
     }
   }

@@ -61,11 +61,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, onUnmounted } from 'vue';
 import { useRoute } from 'vue-router';
 import RepositoryWorkerClient from '../lib/repositoryWorkerClient';
 import { useCategoryStore, type CategoryNode } from '../stores/categoryStore';
 import { useProjectStore } from '../stores/projectStore';
+import { useMetadataStore } from '../stores/metadataStore';
 import { PlusSquare } from 'lucide-vue-next';
 import CategoryTreeItem from '../components/category/CategoryTreeItem.vue';
 import ModalDialog from '../components/common/ModalDialog.vue';
@@ -73,6 +74,7 @@ import ThreeWayCompareModal from '../components/common/ThreeWayCompareModal.vue'
 
 const categoryStore = useCategoryStore();
 const projectStore = useProjectStore();
+const metadataStore = useMetadataStore();
 const treeData = computed(() => categoryStore.getTree);
 
 const selectedId = ref<string | null>(null);
@@ -93,14 +95,14 @@ const route = useRoute()
 const viewTabBadge = computed(() => {
   const proj = projectStore.selectedProject
   if (!proj) return 0
-  const map = projectStore.conflictData[proj] || {}
+  const map = metadataStore.conflictData[proj] || {}
   return Object.values(map).filter((c:any) => c && c.path && c.path.startsWith('CategoryMaster/')).length
 })
 
 function openFirstScopeConflict() {
   const proj = projectStore.selectedProject
   if (!proj) return
-  const map = projectStore.conflictData[proj] || {}
+  const map = metadataStore.conflictData[proj] || {}
   const firstKey = Object.keys(map).find(k => map[k] && map[k].path && map[k].path.startsWith('CategoryMaster/'))
   if (firstKey) {
     compareKey.value = firstKey
@@ -108,12 +110,16 @@ function openFirstScopeConflict() {
   }
 }
 
-watch(() => route.query.conflict, (q) => {
+const stopConflictWatch = watch(() => route.query.conflict, (q) => {
   const v = q as string | undefined
   if (v) {
     compareKey.value = v
     showCompareModal.value = true
   }
+})
+
+onUnmounted(() => {
+  stopConflictWatch()
 })
 
 /**
@@ -174,7 +180,7 @@ function onEditRequest(node: CategoryNode) {
   // open edit modal
   showModal.value = true;
   // if this node has a conflict, offer compare modal instead
-  const map = projectStore.conflictData[projectStore.selectedProject || ''] || {}
+  const map = metadataStore.conflictData[projectStore.selectedProject || ''] || {}
   if (map[node.ID] || Object.values(map).find((v:any)=>v && v.id === node.ID)) {
     openCompare(node.ID)
   }
@@ -224,54 +230,52 @@ async function confirmSave() {
   // Post-save: if editing an existing category, attempt push then remove/sync
   try {
     const proj = projectStore.selectedProject
-    const idForLog = editingId.value || (/* @ts-ignore */ null) || 'unknown'
-    console.info(`同期後処理開始: project=${proj} id=${idForLog}`)
-    if (proj) {
+    if (!proj) {
+      console.info('プロジェクトが未選択のため同期をスキップしました')
+      return
+    }
+    if (!editingId.value) return
+
+    console.info(`同期後処理開始: project=${proj} id=${editingId.value}`)
+    const entry = await metadataStore.getConflictFor(proj, editingId.value)
+    if (!entry) return
+
+    const cfg = await metadataStore.getRepoConfig(proj)
+    if (entry.path && cfg) {
       try {
-        if (editingId.value) {
-          try {
-            const entry = await projectStore.getConflictFor(proj, editingId.value)
-            const cfg = await projectStore.getRepoConfig(proj)
-            if (entry && entry.path && cfg) {
-              try {
-                const client = new RepositoryWorkerClient()
-                const projHandle = await projectStore.getProjectDirHandle(proj)
-                let localText: string | null = null
-                try {
-                  const fh = await projHandle.getFileHandle(entry.path)
-                  localText = await (await fh.getFile()).text()
-                } catch (_e) { localText = null }
-                if (localText != null) {
-                  const pushRes = await client.pushPathsToRemote(cfg, [{ path: entry.path, content: localText }])
-                  if (Array.isArray(pushRes) && pushRes.every(r => r.ok)) {
-                    await projectStore.removeConflict(editingId.value)
-                    console.info(`プッシュ成功・競合削除: id=${editingId.value}`)
-                    return
-                  }
-                }
-              } catch (e) {
-                console.error('pushPathsToRemote でエラー、syncProject にフォールバックします', e)
-              }
-            }
-          } catch (e) { console.error('競合取得エラー', e) }
-          try {
-            await projectStore.removeConflict(editingId.value)
-            console.info(`競合削除成功: id=${editingId.value}`)
-          } catch (err) {
-            console.error(`競合削除失敗: id=${editingId.value}`, err)
+        const client = new RepositoryWorkerClient()
+        const projHandle = await metadataStore.getProjectDirHandle(proj)
+        let localText: string | null = null
+        try {
+          const fh = await projHandle.getFileHandle(entry.path)
+          localText = await (await fh.getFile()).text()
+        } catch (_e) {
+          localText = null
+        }
+        if (localText != null) {
+          const pushRes = await client.pushPathsToRemote(cfg, [{ path: entry.path, content: localText }])
+          if (Array.isArray(pushRes) && pushRes.every(r => r.ok)) {
+            await metadataStore.removeConflict(proj, editingId.value)
+            console.info(`プッシュ成功・競合削除: id=${editingId.value}`)
+            return
           }
         }
-      } catch (err) {
-        console.error('競合処理中にエラー', err)
+      } catch (e) {
+        console.error('pushPathsToRemote でエラー、syncProject にフォールバックします', e)
       }
-      try {
-        await projectStore.syncProject(proj)
-        console.info(`同期成功: project=${proj}`)
-      } catch (err) {
-        console.error(`同期失敗: project=${proj}`, err)
-      }
-    } else {
-      console.info('プロジェクトが未選択のため同期をスキップしました')
+    }
+
+    try {
+      await metadataStore.removeConflict(proj, editingId.value)
+      console.info(`競合削除成功: id=${editingId.value}`)
+    } catch (err) {
+      console.error(`競合削除失敗: id=${editingId.value}`, err)
+    }
+    try {
+      await metadataStore.syncProject(proj)
+      console.info(`同期成功: project=${proj}`)
+    } catch (err) {
+      console.error(`同期失敗: project=${proj}`, err)
     }
   } catch (e) {
     console.error('同期後処理で予期せぬエラー', e)
