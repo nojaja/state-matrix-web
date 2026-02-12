@@ -40,7 +40,7 @@ function toSuccessResult(path: string): PushResult {
  * @param worker - ワーカー
  * @param handler - メッセージハンドラ
  */
-function cleanupWorker(worker: Worker, handler: (ev: any) => void): void {
+function cleanupWorker(worker: Worker, handler: Function): void {
   try { worker.removeEventListener('message', handler as EventListener) } catch (e) { console.warn('[worker] removeEventListener error:', e) }
   try { worker.terminate() } catch (e) { console.warn('[worker] terminate error:', e) }
 }

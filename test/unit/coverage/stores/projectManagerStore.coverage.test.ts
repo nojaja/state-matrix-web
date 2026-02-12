@@ -24,14 +24,18 @@ beforeEach(() => {
 describe('projectManagerStore coverage', () => {
   it('fetchAll populates projects from directory entries', async () => {
     const dir: any = {
+      /**
+       * ディレクトリエントリを列挙するジェネレータ（テスト用モック）
+       * @returns {AsyncGenerator<[string, {kind: string}]>} ディレクトリエントリ列挙
+       */
       entries: async function* () {
-        yield ['projA', { kind: 'directory' }]
-        yield ['readme.md', { kind: 'file' }]
-        yield ['projB', { kind: 'directory' }]
-      }
+          yield ['projA', { kind: 'directory' }]
+          yield ['readme.md', { kind: 'file' }]
+          yield ['projB', { kind: 'directory' }]
+        }
     }
 
-    const root: any = { getDirectoryHandle: jest.fn(async (name: string, opts?: any) => dir) }
+    const root: any = { getDirectoryHandle: jest.fn(async (name: string, opts?: any) => { void name; void opts; return dir }) }
     // @ts-ignore
     global.navigator = { storage: { getDirectory: jest.fn(async () => root) } }
 
@@ -61,10 +65,7 @@ describe('projectManagerStore coverage', () => {
   it('createProject validates name and creates directory then refreshes list', async () => {
     const createdNames: string[] = []
     const dir: any = {
-      getDirectoryHandle: jest.fn(async (name: string, opts?: any) => {
-        createdNames.push(name)
-        return {}
-      })
+      getDirectoryHandle: jest.fn(async (name: string, opts?: any) => { createdNames.push(name); void opts; return {} })
     }
     const root: any = { getDirectoryHandle: jest.fn(async () => dir) }
     // @ts-ignore
