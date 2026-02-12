@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
-import { ProcessRepository } from '../repositories';
+import { createRepositories } from '../repositories';
 import type { ProcessType } from '../types/models';
+import type { VirtualFsInstance } from '../types/models';
 import { generateUUID } from '../lib/uuid';
 
 /**
@@ -16,6 +17,7 @@ export const useProcessStore = defineStore('process', {
    * @returns 初期 state オブジェクト
    */
   state: () => ({
+    _processRepository: null as any,
     processes: [] as ProcessType[],
     loading: false,
     initialized: false,
@@ -27,6 +29,18 @@ export const useProcessStore = defineStore('process', {
     } as Partial<ProcessType> & { ID: string; Name: string; Description: string; CategoryID: string },
   }),
   actions: {
+    /**
+     * 処理名: VirtualFS から初期化
+     *
+     * 処理概要: VirtualFS インスタンスを受け取り、プロセスリポジトリを初期化する
+     *
+     * 実装理由: プロジェクト単位で VirtualFS インスタンスを分離管理するため
+     * @param vfs VirtualFS インスタンス
+     */
+    initFromVirtualFS(vfs: VirtualFsInstance) {
+      const repos = createRepositories(vfs);
+      this._processRepository = repos.processRepository;
+    },
     /**
      * 処理名: ドラフトを更新
      * @param partial ドラフトにマージする部分情報
@@ -56,7 +70,7 @@ export const useProcessStore = defineStore('process', {
      * 実装理由: 初期化処理の重複を防ぐため
      */
     async init() {
-      if (this.initialized) return;
+      if (this.initialized || !this._processRepository) return;
       await this.fetchAll();
       this.initialized = true;
     },
@@ -68,9 +82,10 @@ export const useProcessStore = defineStore('process', {
      * 実装理由: UI の一覧表示にデータを提供するため
      */
     async fetchAll() {
+      if (!this._processRepository) return;
       this.loading = true;
       try {
-        this.processes = await ProcessRepository.getAll();
+        this.processes = await this._processRepository.getAll();
       } finally {
         this.loading = false;
       }
@@ -91,7 +106,7 @@ export const useProcessStore = defineStore('process', {
         LastUpdatedBy: 'User', // 仮
         ...partial
       };
-      await ProcessRepository.save(newItem);
+      await this._processRepository.save(newItem);
       await this.fetchAll();
     },
     /**
@@ -107,7 +122,7 @@ export const useProcessStore = defineStore('process', {
         ...item,
         LastUpdatedBy: 'User'
       }
-      await ProcessRepository.save(updated);
+      await this._processRepository.save(updated);
       await this.fetchAll();
     },
     /**
@@ -119,7 +134,7 @@ export const useProcessStore = defineStore('process', {
       * @param id 削除対象のプロセス ID
      */
     async remove(id: string) {
-      await ProcessRepository.delete(id);
+      await this._processRepository.delete(id);
       await this.fetchAll();
     }
   }

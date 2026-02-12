@@ -62,3 +62,51 @@ export const ENTITY_TYPES: EntityType[] = [
   'CausalRelationsTypes',
   'ProcessTypes'
 ];
+
+export type RepoConfig = {
+  provider: 'github' | 'gitlab'
+  owner: string
+  repository: string
+  branch: string
+  host?: string
+  token?: string
+  lastSyncedCommitSha?: string | null
+}
+
+export interface RepoMetadata {
+  headSha: string | null
+  lastSyncedCommitSha: string | null
+  fetchedAt: string // ISO8601 timestamp
+  fileSummary: Array<{ path: string; sha: string }>
+}
+
+export interface ConflictTriple {
+  id: string | null
+  path: string
+  format: 'json' | 'yaml' | 'text'
+  base: string
+  local: string
+  remote: string
+  timestamp: string // ISO8601
+  metadata?: Record<string, any>
+}
+
+/**
+ * VirtualFS インスタンスの型定義
+ * browser-git-ops ライブラリが提供する VirtualFS インターフェース
+ */
+export interface VirtualFsInstance {
+  init(): Promise<void>;
+  readFile: Function;
+  writeFile: Function;
+  readdir: Function;
+  unlink: Function;
+  mkdir?: Function;
+  rmdir?: Function;
+  stat?: Function;
+  getAdapter?(): Promise<{ type: string; opts?: Record<string, unknown> } | null>;
+  setAdapter?: Function;
+  // Conflict API: VirtualFS が管理する競合情報の取得と解決
+  getConflicts?(): Promise<ConflictTriple[]>;
+  resolveConflict?: Function;
+}

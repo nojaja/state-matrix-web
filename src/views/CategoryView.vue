@@ -1,7 +1,9 @@
 <template>
   <div class="h-full flex flex-col">
     <div class="mb-4 flex items-center justify-between">
-      <h2 class="text-xl font-bold">カテゴリ管理</h2>
+      <h2 class="text-xl font-bold">カテゴリ管理
+        <span v-if="viewTabBadge > 0" class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-600 text-white" :aria-label="`カテゴリタブの競合 ${viewTabBadge} 件`" tabindex="0" @click.prevent="openFirstScopeConflict" @keydown.enter.prevent="openFirstScopeConflict" @keydown.space.prevent="openFirstScopeConflict">{{ viewTabBadge }}</span>
+      </h2>
       <button @click="addRootCategory" class="flex items-center space-x-1 px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
         <PlusSquare class="h-4 w-4" />
         <span>ルートカテゴリ追加</span>
@@ -52,17 +54,27 @@
         <button @click="confirmSave" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">保存</button>
       </template>
     </ModalDialog>
+    <ModalDialog v-model="showCompareModal" title="競合解消">
+      <ThreeWayCompareModal :keyId="compareKey || ''" />
+    </ModalDialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch, onUnmounted } from 'vue';
+import { useRoute } from 'vue-router';
+import RepositoryWorkerClient from '../lib/repositoryWorkerClient';
 import { useCategoryStore, type CategoryNode } from '../stores/categoryStore';
+import { useProjectStore } from '../stores/projectStore';
+import { useMetadataStore } from '../stores/metadataStore';
 import { PlusSquare } from 'lucide-vue-next';
 import CategoryTreeItem from '../components/category/CategoryTreeItem.vue';
 import ModalDialog from '../components/common/ModalDialog.vue';
+import ThreeWayCompareModal from '../components/common/ThreeWayCompareModal.vue';
 
 const categoryStore = useCategoryStore();
+const projectStore = useProjectStore();
+const metadataStore = useMetadataStore();
 const treeData = computed(() => categoryStore.getTree);
 
 const selectedId = ref<string | null>(null);
@@ -75,6 +87,50 @@ const targetParentId = ref<string | null>(null);
 onMounted(() => {
   categoryStore.init();
 });
+
+const showCompareModal = ref(false)
+const compareKey = ref<string | null>(null)
+const route = useRoute()
+
+const viewTabBadge = computed(() => {
+  const proj = projectStore.selectedProject
+  if (!proj) return 0
+  const map = metadataStore.conflictData[proj] || {}
+  return Object.values(map).filter((c:any) => c && c.path && c.path.startsWith('CategoryMaster/')).length
+})
+/**
+ * 処理名: 最初の競合を開く
+ */function openFirstScopeConflict() {
+  const proj = projectStore.selectedProject
+  if (!proj) return
+  const map = metadataStore.conflictData[proj] || {}
+  const firstKey = Object.keys(map).find(k => map[k] && map[k].path && map[k].path.startsWith('CategoryMaster/'))
+  if (firstKey) {
+    compareKey.value = firstKey
+    showCompareModal.value = true
+  }
+}
+
+const stopConflictWatch = watch(() => route.query.conflict, (q) => {
+  const v = q as string | undefined
+  if (v) {
+    compareKey.value = v
+    showCompareModal.value = true
+  }
+})
+
+onUnmounted(() => {
+  stopConflictWatch()
+})
+
+/**
+ *
+ * @param key
+ */
+function openCompare(key: string) {
+  compareKey.value = key
+  showCompareModal.value = true
+}
 
 /**
  * 処理名: ノード選択
@@ -122,7 +178,13 @@ function onEditRequest(node: CategoryNode) {
   editingId.value = node.ID;
   editingName.value = node.Name;
   targetParentId.value = node.ParentID ?? null;
+  // open edit modal
   showModal.value = true;
+  // if this node has a conflict, offer compare modal instead
+  const map = metadataStore.conflictData[projectStore.selectedProject || ''] || {}
+  if (map[node.ID] || Object.values(map).find((v:any)=>v && v.id === node.ID)) {
+    openCompare(node.ID)
+  }
 }
 
 /**
@@ -165,6 +227,109 @@ async function confirmSave() {
   }
 
   showModal.value = false;
+
+  // Post-save: if editing an existing category, attempt push then remove/sync
+  await handlePostSave(projectStore.selectedProject, editingId.value, 'CategoryView')
+}
+
+/**
+ * 同期後処理
+ * @param project - プロジェクト名
+ * @param conflictId - 競合ID
+ * @param logPrefix - ログ接頭辞
+ */
+async function handlePostSave(project: string | null, conflictId: string | null, logPrefix: string) {
+  try {
+    if (!project) {
+      console.info('プロジェクトが未選択のため同期をスキップしました')
+      return
+    }
+    if (!conflictId) return
+
+    console.info(`同期後処理開始: project=${project} id=${conflictId}`)
+    const entry = await metadataStore.getConflictFor(project, conflictId)
+    if (!entry) return
+
+    const cfg = await metadataStore.getRepoConfig(project)
+    if (entry.path && cfg) {
+      const localText = await readLocalText(project, entry.path, logPrefix)
+      const pushed = await tryPushSingleFile(cfg, entry.path, localText)
+      if (pushed) {
+        await removeConflictAndLog(project, conflictId)
+        console.info(`プッシュ成功・競合削除: id=${conflictId}`)
+        return
+      }
+    }
+
+    await removeConflictAndLog(project, conflictId)
+    await syncProjectAndLog(project)
+  } catch (e) {
+    console.error('同期後処理で予期せぬエラー', e)
+  }
+}
+
+/**
+ * ローカルテキストを取得
+ * @param project - プロジェクト名
+ * @param path - パス
+ * @param logPrefix - ログ接頭辞
+ * @returns ローカルテキスト
+ */
+async function readLocalText(project: string, path: string, logPrefix: string): Promise<string | null> {
+  try {
+    const projHandle = await metadataStore.getProjectDirHandle(project)
+    const fh = await projHandle.getFileHandle(path)
+    return await (await fh.getFile()).text()
+  } catch (e) {
+    console.warn(`[${logPrefix}] file not found:`, e)
+    return null
+  }
+}
+
+/**
+ * 1ファイルpush
+ * @param cfg - リポ設定
+ * @param path - パス
+ * @param content - コンテンツ
+ * @returns push成功ならtrue
+ */
+async function tryPushSingleFile(cfg: any, path: string, content: string | null): Promise<boolean> {
+  if (content == null) return false
+  try {
+    const client = new RepositoryWorkerClient()
+    const pushRes = await client.pushPathsToRemote(cfg, [{ path, content }])
+    return Array.isArray(pushRes) && pushRes.every(r => r.ok)
+  } catch (e) {
+    console.error('pushPathsToRemote でエラー、syncProject にフォールバックします', e)
+    return false
+  }
+}
+
+/**
+ * 競合削除
+ * @param project - プロジェクト名
+ * @param conflictId - 競合ID
+ */
+async function removeConflictAndLog(project: string, conflictId: string) {
+  try {
+    await metadataStore.removeConflict(project, conflictId)
+    console.info(`競合削除成功: id=${conflictId}`)
+  } catch (err) {
+    console.error(`競合削除失敗: id=${conflictId}`, err)
+  }
+}
+
+/**
+ * 同期実行
+ * @param project - プロジェクト名
+ */
+async function syncProjectAndLog(project: string) {
+  try {
+    await metadataStore.syncProject(project)
+    console.info(`同期成功: project=${project}`)
+  } catch (err) {
+    console.error(`同期失敗: project=${project}`, err)
+  }
 }
 
 /**
@@ -196,4 +361,6 @@ async function _onRename({ id, name }: { id: string; name: string }) {
 }
 // 参照用（ビルド時の未使用エラー回避）
 void _onRename;
+
+// 競合解決ハンドラは未使用のため削除
 </script>

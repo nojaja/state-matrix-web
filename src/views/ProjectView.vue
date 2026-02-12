@@ -26,43 +26,133 @@
       </template>
     </ModalDialog>
 
-    <div v-if="store.loading">読み込み中...</div>
+    <div v-if="projectManagerStore.loading">読み込み中...</div>
 
-    <div v-if="store.projects.length === 0 && !store.loading" class="text-gray-600">
+    <div v-if="projectManagerStore.projects.length === 0 && !projectManagerStore.loading" class="text-gray-600">
       OPFS にプロジェクトが見つかりません。新規作成してください。
     </div>
 
-    <ul v-if="store.projects.length > 0" class="space-y-2">
-      <li v-for="p in store.projects" :key="p" class="flex items-center justify-between border p-2 rounded">
+    <ul v-if="projectManagerStore.projects.length > 0" class="space-y-2">
+      <li v-for="p in projectManagerStore.projects" :key="p" class="flex items-center justify-between border p-2 rounded">
         <div>
           <strong>{{ p }}</strong>
-          <span v-if="store.selectedProject === p" class="ml-2 text-sm text-green-600">(選択中)</span>
+          <span v-if="projectStore.selectedProject === p" class="ml-2 text-sm text-green-600">(選択中)</span>
+          <button
+            v-if="conflictCount(p) > 0"
+            class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-600 text-white"
+            :aria-label="`プロジェクト ${p} の競合 ${conflictCount(p)} 件`"
+            tabindex="0"
+            @click.prevent="openConflictList(p)"
+            @keydown.enter.prevent="openConflictList(p)"
+            @keydown.space.prevent="openConflictList(p)"
+            title="競合の一覧を開く"
+          >
+            {{ conflictCount(p) }}
+          </button>
         </div>
         <div>
           <button class="px-2 py-1 mr-2 border rounded" @click="select(p)">選択</button>
+          <button class="px-2 py-1 mr-2 border rounded" :disabled="isSyncing(p)" @click="doSync(p)">{{ isSyncing(p) ? '同期中...' : '同期' }}</button>
+          <button class="px-2 py-1 mr-2 border rounded" @click="openRepoSettings(p)">設定</button>
         </div>
       </li>
     </ul>
 
     <div class="mt-6">
-      <button v-if="store.selectedProject" class="px-3 py-1 border rounded" @click="clear">選択解除</button>
+      <button v-if="projectStore.selectedProject" class="px-3 py-1 border rounded" @click="clear">選択解除</button>
     </div>
+
+    <RepoSettingsModal v-model="showRepoSettings" />
+
+    <!-- Conflict list modal -->
+    <ModalDialog v-model="showConflictList" title="競合一覧">
+      <div class="space-y-2">
+        <div v-if="!conflictListProject">プロジェクトが選択されていません</div>
+        <div v-else>
+          <ul class="space-y-2 max-h-64 overflow-auto">
+            <li v-for="(entry, key) in metadataStore.conflictData[conflictListProject] || {}" :key="key" class="flex items-center justify-between border p-2 rounded">
+              <div class="truncate">
+                <div class="text-sm font-medium">{{ entry?.metadata?.project || conflictListProject }} / {{ entry?.id || key }}</div>
+                <div class="text-xs text-gray-500 truncate">{{ entry?.path || '' }}</div>
+              </div>
+              <div class="ml-4">
+                <button @click="openCompare(key)" class="px-2 py-1 bg-blue-600 text-white rounded">比較</button>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </ModalDialog>
+
+    <!-- Compare modal -->
+    <ModalDialog v-model="showCompareModal" title="競合解消">
+      <ThreeWayCompareModal :keyId="compareKey || ''" />
+    </ModalDialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, reactive } from 'vue'
 import { useProjectStore } from '../stores/projectStore'
+import { useProjectManagerStore } from '../stores/projectManagerStore'
+import { useMetadataStore } from '../stores/metadataStore'
+import RepoSettingsModal from '../components/common/RepoSettingsModal.vue'
 import ModalDialog from '../components/common/ModalDialog.vue'
+import ThreeWayCompareModal from '../components/common/ThreeWayCompareModal.vue'
 
-const store = useProjectStore()
+const projectStore = useProjectStore()
+const projectManagerStore = useProjectManagerStore()
+const metadataStore = useMetadataStore()
 const showNew = ref(false)
 const newName = ref('')
+const syncing = reactive<Record<string, boolean>>({})
+const showRepoSettings = ref(false)
+const showConflictList = ref(false)
+const conflictListProject = ref<string | null>(null)
+const showCompareModal = ref(false)
+const compareKey = ref<string | null>(null)
+
+/**
+ * 指定プロジェクトの競合件数を返す
+ * @param name - プロジェクト名
+ * @returns 競合件数
+ */
+function conflictCount(name: string) {
+  const m = metadataStore.conflictData[name]
+  return m ? Object.keys(m).length : 0
+}
+
+/**
+ * 処理名: 競合一覧表示
+ * @param name - プロジェクト名
+ */
+function openConflictList(name: string) {
+  conflictListProject.value = name
+  showConflictList.value = true
+}
+
+/**
+ * 処理名: 比較モーダル表示
+ * @param key - 競合ID
+ */
+function openCompare(key: string) {
+  compareKey.value = key
+  showCompareModal.value = true
+}
+
+/**
+ * 処理名: リポ設定表示
+ * @param p - プロジェクト名
+ */
+function openRepoSettings(p: string) {
+  select(p)
+  showRepoSettings.value = true
+}
 
 // store をテンプレートで直接参照することでリアクティブ性を保つ
 
 onMounted(async () => {
-  await store.fetchAll()
+  await projectManagerStore.fetchAll()
 })
 
 /**
@@ -70,7 +160,9 @@ onMounted(async () => {
  */
 async function create() {
   try {
-    await store.createProject(newName.value.trim())
+    await projectManagerStore.createProject(newName.value.trim())
+    await projectManagerStore.fetchAll()
+    projectStore.selectProject(newName.value.trim())
     newName.value = ''
     showNew.value = false
   } catch (e: any) {
@@ -93,14 +185,45 @@ void _cancel;
  * @param name 選択するプロジェクト名
  */
 function select(name: string) {
-  store.selectProject(name)
+  projectStore.selectProject(name)
+}
+
+/**
+ *
+ * @param name
+ */
+// hasConflicts removed (use conflictCount instead)
+
+/**
+ * 処理名: 同期中か判定
+ * @param name - プロジェクト名
+ * @returns 同期中かどうか
+ */
+function isSyncing(name: string) {
+  return !!syncing[name]
+}
+
+/**
+ * 処理名: プロジェクト同期
+ * @param name - プロジェクト名
+ */
+async function doSync(name: string) {
+  try {
+    syncing[name] = true
+    const res = await metadataStore.syncProject(name)
+    alert(`同期完了: ${res.conflicts.length} conflict(s), resolved ${res.resolved.length}${res.needsInit ? ' (remote needs init)' : ''}`)
+  } catch (e: any) {
+    alert('同期エラー: ' + (e && e.message ? e.message : String(e)))
+  } finally {
+    syncing[name] = false
+  }
 }
 
 /**
  * 処理名: 選択解除
  */
 function clear() {
-  store.clearSelection()
+  projectStore.clearSelection()
 }
 </script>
 

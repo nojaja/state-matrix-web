@@ -1,8 +1,8 @@
 // @ts-nocheck
 import { jest } from '@jest/globals';
 import { setActivePinia, createPinia } from 'pinia';
-import { useCategoryStore } from '../../../src/stores/categoryStore';
-import type { CategoryMaster } from '../../../src/types/models';
+import { useCategoryStore } from '../../../../../src/stores/categoryStore';
+import type { CategoryMaster } from '../../../../../src/types/models';
 
 beforeEach(() => {
   setActivePinia(createPinia());
@@ -52,49 +52,57 @@ describe('useCategoryStore getters', () => {
 });
 
 describe('useCategoryStore actions', () => {
-  let CategoryRepository: any;
   let useCategoryStore: any;
+  let mockVfs: any;
 
   beforeAll(async () => {
-    const repoMod = await import('../../../src/repositories');
-    CategoryRepository = repoMod.CategoryRepository;
-    CategoryRepository.getAll = jest.fn().mockResolvedValue([]);
-    CategoryRepository.save = jest.fn().mockResolvedValue(undefined);
-    CategoryRepository.delete = jest.fn().mockResolvedValue(undefined);
-    const storeMod = await import('../../../src/stores/categoryStore');
+    // モックVirtualFSインスタンス
+    mockVfs = {
+      readFile: jest.fn(),
+      writeFile: jest.fn(),
+      readdir: jest.fn().mockResolvedValue([]),
+      unlink: jest.fn(),
+      init: jest.fn()
+    };
+    
+    const storeMod = await import('../../../../../src/stores/categoryStore');
     useCategoryStore = storeMod.useCategoryStore;
   });
 
   beforeEach(() => {
     setActivePinia(createPinia());
     jest.clearAllMocks();
+    
+    // Storeを初期化してRepositoryを設定
+    const store = useCategoryStore();
+    store.initFromVirtualFS(mockVfs);
   });
 
   it('fetchAll loads categories', async () => {
-    CategoryRepository.getAll.mockResolvedValueOnce([
+    const store = useCategoryStore();
+    jest.spyOn(store._categoryRepository, 'getAll').mockResolvedValueOnce([
       { ID: '1', Name: 'Root', ParentID: null, Level: 0, Path: '' }
     ]);
-    const store = useCategoryStore();
     await store.fetchAll();
     expect(store.categories.length).toBe(1);
   });
 
   it('add calls save and refreshes', async () => {
-    CategoryRepository.save.mockResolvedValueOnce(undefined);
-    CategoryRepository.getAll.mockResolvedValueOnce([
+    const store = useCategoryStore();
+    jest.spyOn(store._categoryRepository, 'save').mockResolvedValueOnce(undefined);
+    jest.spyOn(store._categoryRepository, 'getAll').mockResolvedValueOnce([
       { ID: 'new', Name: 'New', ParentID: null, Level: 0, Path: '' }
     ]);
-    const store = useCategoryStore();
     await store.add({ Name: 'New', ParentID: null, Level: 0, Path: '' });
-    expect(CategoryRepository.save).toHaveBeenCalled();
+    expect(store._categoryRepository.save).toHaveBeenCalled();
     expect(store.categories[0].ID).toBe('new');
   });
 
   it('remove calls delete and refreshes', async () => {
-    CategoryRepository.delete.mockResolvedValueOnce(undefined);
-    CategoryRepository.getAll.mockResolvedValueOnce([]);
     const store = useCategoryStore();
+    jest.spyOn(store._categoryRepository, 'delete').mockResolvedValueOnce(undefined);
+    jest.spyOn(store._categoryRepository, 'getAll').mockResolvedValueOnce([]);
     await store.remove('id-1');
-    expect(CategoryRepository.delete).toHaveBeenCalledWith('id-1');
+    expect(store._categoryRepository.delete).toHaveBeenCalledWith('id-1');
   });
 });

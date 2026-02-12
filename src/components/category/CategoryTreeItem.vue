@@ -13,7 +13,7 @@
         <Folder v-if="hasChildren" class="h-4 w-4 fill-current text-yellow-400" />
         <FolderIcon v-else class="h-4 w-4 text-gray-400" />
       </div>
-      <span class="text-sm select-none">{{ node.Name }}</span>
+      <span class="text-sm select-none">{{ node.Name }} <span v-if="hasConflict" class="ml-1 text-red-600">●</span></span>
 
       <!-- Actions (Visible on hover or selected) -->
       <div v-if="!readonly" class="ml-auto hidden group-hover:flex space-x-1">
@@ -51,6 +51,8 @@
 import { computed } from 'vue';
 import { Folder, Folder as FolderIcon, PlusCircle, Trash2, Edit2 } from 'lucide-vue-next';
 import type { CategoryNode } from '../../stores/categoryStore';
+import { useProjectStore } from '../../stores/projectStore'
+import { useMetadataStore } from '../../stores/metadataStore'
 
 const _props = defineProps<{
   node: CategoryNode;
@@ -62,6 +64,14 @@ const emit = defineEmits(['select', 'add-child', 'delete', 'move', 'edit-request
 
 const isSelected = computed(() => _props.node.ID === _props.selectedId);
 const hasChildren = computed(() => _props.node.children && _props.node.children.length > 0);
+const projectStore = useProjectStore()
+const metadataStore = useMetadataStore()
+const hasConflict = computed(() => {
+  const p = projectStore.selectedProject
+  if (!p) return false
+  const map = metadataStore.conflictData[p] || {}
+  return !!(map[_props.node.ID] || Object.values(map).find((v:any)=>v && v.id===_props.node.ID))
+})
 
 /**
  * 処理名: ノード選択

@@ -1,56 +1,31 @@
-import { defineStore } from 'pinia'
+﻿import { defineStore } from 'pinia'
 
+/**
+ * 処理名: プロジェクト選択ストア
+ *
+ * 処理概要: 現在選択されているプロジェクト名を管理する Pinia ストア
+ *
+ * 実装理由: プロジェクト選択状態をグローバルに提供するため
+ *
+ * 注記: プロジェクト一覧管理、メタデータ管理は useMetadataStore で実行
+ */
 export const useProjectStore = defineStore('project', {
   /**
-   * state: ストアの初期状態を返す
-   * @returns 初期 state オブジェクト
+   * ステート定義
+   * @returns 初期ステート
    */
   state: () => ({
-    projects: [] as string[],
     selectedProject: ((typeof localStorage !== 'undefined' && localStorage.getItem('selectedProject')) || null) as string | null,
-    loading: false
   }),
+
   actions: {
     /**
-     * 処理名: プロジェクト一覧取得
-     *
-     * 処理概要: ファイルシステムからプロジェクトディレクトリを列挙して `projects` を更新する
-     */
-    async fetchAll() {
-      this.loading = true
-      try {
-        const root = await (navigator as any).storage.getDirectory()
-        const ROOT_DIR = 'data-mgmt-system'
-        const dir = await root.getDirectoryHandle(ROOT_DIR, { create: true })
-        const list: string[] = []
-        // @ts-ignore
-        for await (const [name, handle] of dir.entries()) {
-          if (handle.kind === 'directory') list.push(name)
-        }
-        this.projects = list
-      } catch (e) {
-        console.error('プロジェクト一覧取得エラー', e)
-        this.projects = []
-      } finally {
-        this.loading = false
-      }
-    },
-    /**
-     * 処理名: プロジェクト作成
-     * @param name 作成するプロジェクト名
-     */
-    async createProject(name: string) {
-      if (!name || !name.trim()) throw new Error('名前を入力してください')
-      const root = await (navigator as any).storage.getDirectory()
-      const ROOT_DIR = 'data-mgmt-system'
-      const dir = await root.getDirectoryHandle(ROOT_DIR, { create: true })
-      await dir.getDirectoryHandle(name, { create: true })
-      await this.fetchAll()
-      this.selectProject(name)
-    },
-    /**
      * 処理名: プロジェクト選択
-     * @param name 選択するプロジェクト名、`null` で未選択にする
+     *
+     * 処理概要: プロジェクト名を選択状態に設定し localStorage に永続化
+     *
+     * 実装理由: プロジェクト切替時に選択状態を管理するため
+     * @param name プロジェクト名、null で未選択
      */
     selectProject(name: string | null) {
       this.selectedProject = name
@@ -59,12 +34,17 @@ export const useProjectStore = defineStore('project', {
           if (name) localStorage.setItem('selectedProject', name)
           else localStorage.removeItem('selectedProject')
         }
-      } catch (_e) {
-        // ignore in non-browser test env
+      } catch (e) {
+        console.warn('[projectStore] localStorage error:', e)
       }
     },
+
     /**
      * 処理名: 選択クリア
+     *
+     * 処理概要: プロジェクト選択をリセット
+     *
+     * 実装理由: プロジェクト終了時に状態をクリアするため
      */
     clearSelection() {
       this.selectProject(null)

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
-import { ArtifactRepository } from '../repositories';
-import type { ArtifactType } from '../types/models';
+import { createRepositories } from '../repositories';
+import type { ArtifactType, VirtualFsInstance } from '../types/models';
 import { generateUUID } from '../lib/uuid';
 
 /**
@@ -26,8 +26,23 @@ export const useArtifactStore = defineStore('artifact', {
       Note: '',
       CategoryID: ''
     } as Partial<ArtifactType> & { ID: string; Name: string; Content: string; Note: string; CategoryID: string },
+    _artifactRepository: null as any
   }),
   actions: {
+    /**
+     * 処理名: VirtualFS から初期化
+     *
+     * 処理概要: プロジェクト選択時に VirtualFS インスタンスを受け取り、リポジトリを初期化する
+     *
+     * 実装理由: プロジェクト単位のリポジトリ分離を実現するため
+     * @param vfs VirtualFsInstance（オープン済み）
+     */
+    initFromVirtualFS(vfs: VirtualFsInstance) {
+      const repos = createRepositories(vfs);
+      this._artifactRepository = repos.artifactRepository;
+      this.initialized = false;  // リセット
+    },
+
     /**
      * 処理名: ドラフトを設定
      * @param partial ドラフトにマージする部分情報
@@ -51,12 +66,12 @@ export const useArtifactStore = defineStore('artifact', {
     /**
      * 処理名: 初期化
      *
-     * 処理概要: 初回ロード時にデータを取得して初期化する
+     * 処理概要: initFromVirtualFS 後に一度だけ実行し、データを取得して初期化する
      *
      * 実装理由: 重複した初期化処理を防ぐため
      */
     async init() {
-      if (this.initialized) return;
+      if (this.initialized || !this._artifactRepository) return;
       await this.fetchAll();
       this.initialized = true;
     },
@@ -70,7 +85,7 @@ export const useArtifactStore = defineStore('artifact', {
     async fetchAll() {
       this.loading = true;
       try {
-        this.artifacts = await ArtifactRepository.getAll();
+        this.artifacts = await this._artifactRepository.getAll();
       } finally {
         this.loading = false;
       }
@@ -92,7 +107,7 @@ export const useArtifactStore = defineStore('artifact', {
         LastUpdatedBy: 'User',
         ...partial
       };
-      await ArtifactRepository.save(newItem);
+      await this._artifactRepository.save(newItem);
       await this.fetchAll();
     },
     /**
@@ -109,7 +124,7 @@ export const useArtifactStore = defineStore('artifact', {
         ...item,
         LastUpdatedBy: 'User'
       }
-      await ArtifactRepository.save(updated);
+      await this._artifactRepository.save(updated);
       await this.fetchAll();
     },
     /**
@@ -122,7 +137,7 @@ export const useArtifactStore = defineStore('artifact', {
      * @returns Promise<void>
      */
     async remove(id: string) {
-      await ArtifactRepository.delete(id);
+      await this._artifactRepository.delete(id);
       await this.fetchAll();
     }
   }

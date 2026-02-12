@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
-import { ActionTriggerRepository, CausalRelationRepository } from '../repositories';
+import { createRepositories } from '../repositories';
 import type { ActionTriggerType, CausalRelationType } from '../types/models';
+import type { VirtualFsInstance } from '../types/models';
 import { generateUUID } from '../lib/uuid';
 
 /**
@@ -23,6 +24,8 @@ export const useTriggerStore = defineStore('data-mgmt-system/trigger', {
    * @returns 初期 state オブジェクト
    */
   state: () => ({
+    _actionTriggerRepository: null as any,
+    _causalRelationRepository: null as any,
     triggers: [] as ActionTriggerType[],
     relations: [] as CausalRelationType[],
     loading: false,
@@ -54,6 +57,19 @@ export const useTriggerStore = defineStore('data-mgmt-system/trigger', {
   },
   actions: {
     /**
+     * 処理名: VirtualFS から初期化
+     *
+     * 処理概要: VirtualFS インスタンスを受け取り、トリガーリポジトリを初期化する
+     *
+     * 実装理由: プロジェクト単位で VirtualFS インスタンスを分離管理するため
+     * @param vfs VirtualFS インスタンス
+     */
+    initFromVirtualFS(vfs: VirtualFsInstance) {
+      const repos = createRepositories(vfs);
+      this._actionTriggerRepository = repos.actionTriggerRepository;
+      this._causalRelationRepository = repos.causalRelationRepository;
+    },
+    /**
      * 処理名: 初期化
      *
      * 処理概要: トリガーと関連を読み込んでストアを初期化する
@@ -61,7 +77,7 @@ export const useTriggerStore = defineStore('data-mgmt-system/trigger', {
      * 実装理由: 初回ロード時のセットアップを行うため
      */
     async init() {
-      if (this.initialized) return;
+      if (this.initialized || !this._actionTriggerRepository) return;
       await this.fetchAll();
       this.initialized = true;
     },
@@ -74,11 +90,12 @@ export const useTriggerStore = defineStore('data-mgmt-system/trigger', {
      * 実装理由: UI へのデータ供給と整合性確保のため
      */
     async fetchAll() {
+      if (!this._actionTriggerRepository) return;
       this.loading = true;
       try {
         const [t, r] = await Promise.all([
-          ActionTriggerRepository.getAll(),
-          CausalRelationRepository.getAll()
+          this._actionTriggerRepository.getAll(),
+          this._causalRelationRepository.getAll()
         ]);
         this.triggers = t;
         this.relations = r;
@@ -153,7 +170,7 @@ export const useTriggerStore = defineStore('data-mgmt-system/trigger', {
         ...triggerPartial
       };
 
-      await ActionTriggerRepository.save(newTrigger);
+      await this._actionTriggerRepository.save(newTrigger);
 
       for (const rel of relationsPartial) {
         const newRel: CausalRelationType = {
@@ -163,7 +180,7 @@ export const useTriggerStore = defineStore('data-mgmt-system/trigger', {
           LastUpdatedBy: 'User',
           ...rel
         };
-        await CausalRelationRepository.save(newRel);
+        await this._causalRelationRepository.save(newRel);
       }
 
       await this.fetchAll();
@@ -185,19 +202,19 @@ export const useTriggerStore = defineStore('data-mgmt-system/trigger', {
       deletedRelationIds: string[] // 削除された関連ID
     ) {
       // トリガー更新
-      await ActionTriggerRepository.save({
+      await this._actionTriggerRepository.save({
         ...trigger,
         LastUpdatedBy: 'User'
       });
 
       // 関連削除
       for (const id of deletedRelationIds) {
-        await CausalRelationRepository.delete(id);
+        await this._causalRelationRepository.delete(id);
       }
 
       // 関連保存（新規 or 更新）
       for (const rel of relations) {
-        await CausalRelationRepository.save({
+        await this._causalRelationRepository.save({
           ...rel,
           LastUpdatedBy: 'User'
         });
@@ -219,9 +236,9 @@ export const useTriggerStore = defineStore('data-mgmt-system/trigger', {
       // 関連も削除すべき
       const rels = this.relations.filter(r => r.ActionTriggerTypeID === id);
       for (const r of rels) {
-        await CausalRelationRepository.delete(r.ID);
+        await this._causalRelationRepository.delete(r.ID);
       }
-      await ActionTriggerRepository.delete(id);
+      await this._actionTriggerRepository.delete(id);
       await this.fetchAll();
     }
   }
