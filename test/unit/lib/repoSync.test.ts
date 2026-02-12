@@ -1,4 +1,3 @@
-import { jest } from '@jest/globals'
 import { buildConflictsMap, threeway } from '../../../src/lib/repoSync'
 
 describe('repoSync', () => {

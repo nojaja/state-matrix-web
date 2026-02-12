@@ -40,6 +40,7 @@ const badgeCache = ref({
  * 処理概要: VirtualFsManager でプロジェクトを開き、全ストアを初期化する
  *
  * 実装理由: VirtualFS ベースのアーキテクチャにより統一されたファイル管理を実現するため
+ * @param projectName - 切り替え先のプロジェクト名
  */
 const switchProject = async (projectName: string | null) => {
   if (!projectName) {
@@ -83,6 +84,11 @@ const switchProject = async (projectName: string | null) => {
 }
 
 // Helper to count conflicts by path prefix
+/**
+ * 処理名: プレフィクス別競合数カウント
+ * @param prefixes - パスプレフィクスの配列
+ * @returns 一致する競合の数
+ */
 function countByPrefixes(prefixes: string[]) {
   const proj = projectStore.selectedProject
   if (!proj) return 0
@@ -95,6 +101,10 @@ function countByPrefixes(prefixes: string[]) {
 }
 
 // badge計算を手動で更新（computed の無限ループを防ぐ）
+/**
+ * 処理名: バッジキャッシュ更新
+ * 処理概要: 競合データからバッジ表示用の競合数を計算
+ */
 function updateBadgeCache() {
   const proj = projectStore.selectedProject
   if (!proj) {
@@ -140,6 +150,10 @@ onUnmounted(() => {
   virtualFsManager.closeProject()
 })
 
+/**
+ * 処理名: バッジクリック時の競合詳細表示
+ * @param kind - 窶合種別（project, process, artifact, trigger, category）
+ */
 function openBadge(kind: string) {
   const proj = projectStore.selectedProject;
   if (!proj) return;

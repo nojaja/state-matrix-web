@@ -1,10 +1,10 @@
-import { test, expect } from '@playwright/test'
+import { test } from '@playwright/test'
 
 // E2E skeleton: 設定登録 -> onSync -> 競合発生 -> モーダルで解決 -> push
 // 実行には開発サーバが必要。手動で `npm run dev` を用意してください。
 
 test.describe('Repo sync end-to-end (skeleton)', () => {
-  test('settings -> sync -> conflict -> resolve', async ({ page }) => {
+  test('settings -> sync -> conflict -> resolve', async () => {
     // TODO: implement steps
     // 1. Open app
     // await page.goto('http://localhost:8080')

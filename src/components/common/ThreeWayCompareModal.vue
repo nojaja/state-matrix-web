@@ -44,8 +44,8 @@ async function pushThenSync(project: string, path: string, content: string) {
   const cfg = await metadataStore.getRepoConfig(project)
   try {
     if (cfg) await client.pushPathsToRemote(cfg, [{ path, content }])
-  } catch (_e) {
-    // ignore push errors, we'll re-sync anyway
+  } catch (e) {
+    console.warn('[ThreeWayCompareModal] push error, will re-sync:', e)
   }
   await metadataStore.syncProject(project)
 }

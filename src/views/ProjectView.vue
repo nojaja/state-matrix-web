@@ -112,25 +112,37 @@ const conflictListProject = ref<string | null>(null)
 const showCompareModal = ref(false)
 const compareKey = ref<string | null>(null)
 
-/** 指定プロジェクトの競合件数を返す */
+/**
+ * 指定プロジェクトの競合件数を返す
+ * @param name - プロジェクト名
+ * @returns 競合件数
+ */
 function conflictCount(name: string) {
   const m = metadataStore.conflictData[name]
   return m ? Object.keys(m).length : 0
 }
 
+/**
+ * 処理名: 競合一覧表示
+ * @param name - プロジェクト名
+ */
 function openConflictList(name: string) {
   conflictListProject.value = name
   showConflictList.value = true
 }
 
+/**
+ * 処理名: 比較モーダル表示
+ * @param key - 競合ID
+ */
 function openCompare(key: string) {
   compareKey.value = key
   showCompareModal.value = true
 }
 
 /**
- *
- * @param p
+ * 処理名: リポ設定表示
+ * @param p - プロジェクト名
  */
 function openRepoSettings(p: string) {
   select(p)
@@ -183,16 +195,17 @@ function select(name: string) {
 // hasConflicts removed (use conflictCount instead)
 
 /**
- *
- * @param name
+ * 処理名: 同期中か判定
+ * @param name - プロジェクト名
+ * @returns 同期中かどうか
  */
 function isSyncing(name: string) {
   return !!syncing[name]
 }
 
 /**
- *
- * @param name
+ * 処理名: プロジェクト同期
+ * @param name - プロジェクト名
  */
 async function doSync(name: string) {
   try {

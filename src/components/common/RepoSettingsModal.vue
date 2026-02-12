@@ -91,6 +91,10 @@ function close() {
 }
 
 // Load config when component mounts or when modal becomes visible
+/**
+ * 処理名: 設定読み込み
+ * 処理概要: モーダル表示時にリポ設定を読み込む
+ */
 async function loadConfigIfVisible() {
   const p = projectStore.selectedProject
   if (!p) return

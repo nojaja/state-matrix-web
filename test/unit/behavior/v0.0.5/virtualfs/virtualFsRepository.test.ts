@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
 
 type VirtualFsInstance = {
-  readFile: (path: string) => Promise<string>;
-  writeFile: (path: string, content: string) => Promise<void>;
-  readdir: (path: string) => Promise<string[]>;
-  unlink: (path: string) => Promise<void>;
+  readFile: Function;
+  writeFile: Function;
+  readdir: Function;
+  unlink: Function;
 };
 
 let VirtualFsRepository: any;

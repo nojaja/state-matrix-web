@@ -8,8 +8,9 @@ export type FileTriple = {
 }
 
 /**
- *
- * @param triples
+ * 処理名: Worker側threeway
+ * @param triples - ファイルトリプル
+ * @returns マージ結果
  */
 export async function threeway(triples: FileTriple[]) {
   // Worker-side threeway simply delegates to repoSync.threeway
@@ -22,20 +23,24 @@ export async function threeway(triples: FileTriple[]) {
 }
 
 /**
- *
- * @param _cfg
+ * 処理名: リモートツリー取得
+ * @param _cfg - 設定(未使用)
+ * @returns ツリー情報
  */
 export async function fetchRemoteTree(_cfg: any) {
+  void _cfg
   // Placeholder: real implementation performs network IO.
   return { ok: true, result: { headSha: null, files: [] } }
 }
 
 /**
- *
- * @param _cfg
- * @param _files
+ * 処理名: プッシュ処理
+ * @param _cfg - 設定(未使用)
+ * @param _files - ファイル配列(未使用)
+ * @returns プッシュ結果
  */
 export async function push(_cfg: any, _files: { path: string; content: string }[]) {
+  void _cfg
   // Placeholder: real implementation performs network IO.
   return { ok: true, result: { pushed: _files.map((f) => f.path) } }
 }

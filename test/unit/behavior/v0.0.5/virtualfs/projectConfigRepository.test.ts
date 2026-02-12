@@ -32,7 +32,7 @@ describe('ProjectConfigRepository', () => {
   it('setAdapter forwards input to vfs.setAdapter', async () => {
     const vfs = {
       setAdapter: (jest.fn() as jest.MockedFunction<
-        (arg0: any, arg1?: AdapterMeta) => Promise<void>
+        (a: null, b: AdapterMeta) => Promise<void>
       >).mockResolvedValue(undefined)
     };
     const manager = { getCurrentVfs: jest.fn(() => vfs) };

@@ -56,7 +56,7 @@ it('trigger store basic flows', async () => {
 
   // addTrigger: spy save and relation save
   const spySaveTrigger = jest.spyOn(store._actionTriggerRepository, 'save').mockResolvedValue(undefined);
-  const spySaveRelation = jest.spyOn(store._causalRelationRepository, 'save').mockResolvedValue(undefined);
+  jest.spyOn(store._causalRelationRepository, 'save').mockResolvedValue(undefined);
   // ensure fetchAll called after addTrigger
   const spyFetchAll = jest.spyOn(store, 'fetchAll');
   await store.addTrigger({ Name: 'New' } as any, [] as any);

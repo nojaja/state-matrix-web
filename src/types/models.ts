@@ -97,16 +97,16 @@ export interface ConflictTriple {
  */
 export interface VirtualFsInstance {
   init(): Promise<void>;
-  readFile(path: string): Promise<string>;
-  writeFile(path: string, content: string): Promise<void>;
-  readdir(path: string): Promise<string[]>;
-  unlink(path: string): Promise<void>;
-  mkdir?(path: string): Promise<void>;
-  rmdir?(path: string): Promise<void>;
-  stat?(path: string): Promise<any>;
+  readFile: Function;
+  writeFile: Function;
+  readdir: Function;
+  unlink: Function;
+  mkdir?: Function;
+  rmdir?: Function;
+  stat?: Function;
   getAdapter?(): Promise<{ type: string; opts?: Record<string, unknown> } | null>;
-  setAdapter?(input: { type: string; opts?: Record<string, unknown> }): Promise<void>;
+  setAdapter?: Function;
   // Conflict API: VirtualFS が管理する競合情報の取得と解決
   getConflicts?(): Promise<ConflictTriple[]>;
-  resolveConflict?(path: string, resolution: 'local' | 'remote'): Promise<void>;
+  resolveConflict?: Function;
 }

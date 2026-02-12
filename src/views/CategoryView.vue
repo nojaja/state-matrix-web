@@ -98,8 +98,9 @@ const viewTabBadge = computed(() => {
   const map = metadataStore.conflictData[proj] || {}
   return Object.values(map).filter((c:any) => c && c.path && c.path.startsWith('CategoryMaster/')).length
 })
-
-function openFirstScopeConflict() {
+/**
+ * 処理名: 最初の競合を開く
+ */function openFirstScopeConflict() {
   const proj = projectStore.selectedProject
   if (!proj) return
   const map = metadataStore.conflictData[proj] || {}
@@ -228,57 +229,106 @@ async function confirmSave() {
   showModal.value = false;
 
   // Post-save: if editing an existing category, attempt push then remove/sync
+  await handlePostSave(projectStore.selectedProject, editingId.value, 'CategoryView')
+}
+
+/**
+ * 同期後処理
+ * @param project - プロジェクト名
+ * @param conflictId - 競合ID
+ * @param logPrefix - ログ接頭辞
+ */
+async function handlePostSave(project: string | null, conflictId: string | null, logPrefix: string) {
   try {
-    const proj = projectStore.selectedProject
-    if (!proj) {
+    if (!project) {
       console.info('プロジェクトが未選択のため同期をスキップしました')
       return
     }
-    if (!editingId.value) return
+    if (!conflictId) return
 
-    console.info(`同期後処理開始: project=${proj} id=${editingId.value}`)
-    const entry = await metadataStore.getConflictFor(proj, editingId.value)
+    console.info(`同期後処理開始: project=${project} id=${conflictId}`)
+    const entry = await metadataStore.getConflictFor(project, conflictId)
     if (!entry) return
 
-    const cfg = await metadataStore.getRepoConfig(proj)
+    const cfg = await metadataStore.getRepoConfig(project)
     if (entry.path && cfg) {
-      try {
-        const client = new RepositoryWorkerClient()
-        const projHandle = await metadataStore.getProjectDirHandle(proj)
-        let localText: string | null = null
-        try {
-          const fh = await projHandle.getFileHandle(entry.path)
-          localText = await (await fh.getFile()).text()
-        } catch (_e) {
-          localText = null
-        }
-        if (localText != null) {
-          const pushRes = await client.pushPathsToRemote(cfg, [{ path: entry.path, content: localText }])
-          if (Array.isArray(pushRes) && pushRes.every(r => r.ok)) {
-            await metadataStore.removeConflict(proj, editingId.value)
-            console.info(`プッシュ成功・競合削除: id=${editingId.value}`)
-            return
-          }
-        }
-      } catch (e) {
-        console.error('pushPathsToRemote でエラー、syncProject にフォールバックします', e)
+      const localText = await readLocalText(project, entry.path, logPrefix)
+      const pushed = await tryPushSingleFile(cfg, entry.path, localText)
+      if (pushed) {
+        await removeConflictAndLog(project, conflictId)
+        console.info(`プッシュ成功・競合削除: id=${conflictId}`)
+        return
       }
     }
 
-    try {
-      await metadataStore.removeConflict(proj, editingId.value)
-      console.info(`競合削除成功: id=${editingId.value}`)
-    } catch (err) {
-      console.error(`競合削除失敗: id=${editingId.value}`, err)
-    }
-    try {
-      await metadataStore.syncProject(proj)
-      console.info(`同期成功: project=${proj}`)
-    } catch (err) {
-      console.error(`同期失敗: project=${proj}`, err)
-    }
+    await removeConflictAndLog(project, conflictId)
+    await syncProjectAndLog(project)
   } catch (e) {
     console.error('同期後処理で予期せぬエラー', e)
+  }
+}
+
+/**
+ * ローカルテキストを取得
+ * @param project - プロジェクト名
+ * @param path - パス
+ * @param logPrefix - ログ接頭辞
+ * @returns ローカルテキスト
+ */
+async function readLocalText(project: string, path: string, logPrefix: string): Promise<string | null> {
+  try {
+    const projHandle = await metadataStore.getProjectDirHandle(project)
+    const fh = await projHandle.getFileHandle(path)
+    return await (await fh.getFile()).text()
+  } catch (e) {
+    console.warn(`[${logPrefix}] file not found:`, e)
+    return null
+  }
+}
+
+/**
+ * 1ファイルpush
+ * @param cfg - リポ設定
+ * @param path - パス
+ * @param content - コンテンツ
+ * @returns push成功ならtrue
+ */
+async function tryPushSingleFile(cfg: any, path: string, content: string | null): Promise<boolean> {
+  if (content == null) return false
+  try {
+    const client = new RepositoryWorkerClient()
+    const pushRes = await client.pushPathsToRemote(cfg, [{ path, content }])
+    return Array.isArray(pushRes) && pushRes.every(r => r.ok)
+  } catch (e) {
+    console.error('pushPathsToRemote でエラー、syncProject にフォールバックします', e)
+    return false
+  }
+}
+
+/**
+ * 競合削除
+ * @param project - プロジェクト名
+ * @param conflictId - 競合ID
+ */
+async function removeConflictAndLog(project: string, conflictId: string) {
+  try {
+    await metadataStore.removeConflict(project, conflictId)
+    console.info(`競合削除成功: id=${conflictId}`)
+  } catch (err) {
+    console.error(`競合削除失敗: id=${conflictId}`, err)
+  }
+}
+
+/**
+ * 同期実行
+ * @param project - プロジェクト名
+ */
+async function syncProjectAndLog(project: string) {
+  try {
+    await metadataStore.syncProject(project)
+    console.info(`同期成功: project=${project}`)
+  } catch (err) {
+    console.error(`同期失敗: project=${project}`, err)
   }
 }
 

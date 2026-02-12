@@ -10,6 +10,10 @@
  * 注記: プロジェクト一覧管理、メタデータ管理は useMetadataStore で実行
  */
 export const useProjectStore = defineStore('project', {
+  /**
+   * ステート定義
+   * @returns 初期ステート
+   */
   state: () => ({
     selectedProject: ((typeof localStorage !== 'undefined' && localStorage.getItem('selectedProject')) || null) as string | null,
   }),
@@ -30,8 +34,8 @@ export const useProjectStore = defineStore('project', {
           if (name) localStorage.setItem('selectedProject', name)
           else localStorage.removeItem('selectedProject')
         }
-      } catch (_e) {
-        // ignore in non-browser test env
+      } catch (e) {
+        console.warn('[projectStore] localStorage error:', e)
       }
     },
 

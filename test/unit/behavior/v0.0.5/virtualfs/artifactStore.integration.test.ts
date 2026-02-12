@@ -11,7 +11,6 @@ import { createRepositories } from '../../../../../src/repositories';
 describe('artifactStore with VirtualFS (integration)', () => {
   let mockVfs: VirtualFsInstance;
   let repos: ReturnType<typeof createRepositories>;
-  let useArtifactStore: any;
 
   beforeEach(async () => {
     // Pinia 初期化
@@ -28,14 +27,11 @@ describe('artifactStore with VirtualFS (integration)', () => {
     // リポジトリ生成
     repos = createRepositories(mockVfs);
 
-    // ストア動的インポート
-    const storeMod = await import('../../../../../src/stores/artifactStore');
-    useArtifactStore = storeMod.useArtifactStore;
+    // ストア動的インポート（副作用のみ）
+    await import('../../../../../src/stores/artifactStore');
   });
 
   it('can initialize and fetch artifacts from VirtualFS', async () => {
-    const store = useArtifactStore();
-
     // リポジトリから fetchAll (概念デモ)
     // 実际のストア実装では、init アクション内で repositories.artifactRepository.getAll() を呼ぶ
     const artifacts = await repos.artifactRepository.getAll();
@@ -52,8 +48,8 @@ describe('artifactStore with VirtualFS (integration)', () => {
     expect(repos.processRepository).toBeDefined();
 
     // readdir が各ディレクトリに対して呼ばれる可能性
-    const allArtifacts = await repos.artifactRepository.getAll();
-    const allCategories = await repos.categoryRepository.getAll();
+    await repos.artifactRepository.getAll();
+    await repos.categoryRepository.getAll();
 
     expect(mockVfs.readdir).toHaveBeenCalled();
   });

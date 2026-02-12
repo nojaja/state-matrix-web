@@ -76,6 +76,9 @@ watchEffect(() => {
 
 /**
  * Push and sync helper
+ * @param project - プロジェクト名
+ * @param path - ファイルパス
+ * @param content - ファイル内容
  */
 async function pushThenSync(project: string, path: string, content: string) {
   const client = new RepositoryWorkerClient()
@@ -87,11 +90,16 @@ async function pushThenSync(project: string, path: string, content: string) {
     } else {
       await metadataStore.syncProject(project)
     }
-  } catch (_e) {
+  } catch (e) {
+    console.error('[ConflictFields] saveRemote error:', e)
     await metadataStore.syncProject(project)
   }
 }
 
+/**
+ * 処理名: ローカル側を適用
+ * 処理概要: 競合解決でローカルの内容を採用
+ */
 async function applyLocal() {
   if (!props.keyId) return
   const p = projectStore.selectedProject
@@ -108,6 +116,10 @@ async function applyLocal() {
   await pushThenSync(p, e.path, content)
 }
 
+/**
+ * 処理名: リモート側を適用
+ * 処理概要: 競合解決でリモートの内容を採用
+ */
 async function applyRemote() {
   if (!props.keyId) return
   const p = projectStore.selectedProject
@@ -124,6 +136,10 @@ async function applyRemote() {
   await pushThenSync(p, e.path, content)
 }
 
+/**
+ * 処理名: 手動編集値を適用
+ * 処理概要: ユーザーが編集した内容で競合を解決
+ */
 async function applyManual() {
   if (!props.keyId) return
   const p = projectStore.selectedProject
@@ -146,6 +162,10 @@ const conflicts = computed(() => {
   return metadataStore.conflictData?.[p] || {}
 })
 
+/**
+ * 処理名: ローカルで解決
+ * @param key - 競合ID
+ */
 async function resolveAsLocal(key: string) {
   try {
     const project = projectStore.selectedProject
@@ -165,6 +185,10 @@ async function resolveAsLocal(key: string) {
   }
 }
 
+/**
+ * 処理名: リモートで解決
+ * @param key - 競合ID
+ */
 async function resolveAsRemote(key: string) {
   try {
     const project = projectStore.selectedProject

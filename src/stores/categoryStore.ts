@@ -69,7 +69,7 @@ export const useCategoryStore = defineStore('category', {
      * 処理名: フルパス取得
      * @returns (id: string) => string ルートからのスラッシュ区切りパス
      */
-    getFullPath(): (id: string) => string {
+    getFullPath() {
       const map: Record<string, CategoryMaster> = this.getMap;
       return (id: string) => {
         if (!id) return '';

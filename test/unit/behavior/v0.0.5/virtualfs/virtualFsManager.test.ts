@@ -1,17 +1,31 @@
 import { beforeAll, beforeEach, describe, expect, it, jest } from '@jest/globals';
 
+/**
+ * 処理名: OPFSストレージモック
+ */
 class MockOpfsStorage {
   static availableRoots = jest.fn();
   rootName: string;
   projectName: string;
 
+  /**
+   * コンストラクタ
+   * @param rootName - ルート名
+   * @param projectName - プロジェクト名
+   */
   constructor(rootName: string, projectName: string) {
     this.rootName = rootName;
     this.projectName = projectName;
   }
 }
 
+/**
+ * initモック
+ */
 const initMock = jest.fn();
+/**
+ * VirtualFSコンストラクタモック
+ */
 const virtualFsCtor = jest.fn().mockImplementation((args: { backend: unknown }) => ({
   init: initMock,
   backend: args.backend

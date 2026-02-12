@@ -1,8 +1,9 @@
 import repoSync from '../lib/repoSync'
 
 /**
- *
- * @param msg
+ * 処理名: Workerメッセージハンドラ
+ * @param msg - メッセージ
+ * @returns ハンドラ結果
  */
 export async function handleWorkerMessage(msg: any) {
   try {
@@ -22,10 +23,12 @@ export async function handleWorkerMessage(msg: any) {
 
 // simple fetchRemoteTree mock for harness tests (can be extended)
 /**
- *
- * @param cfg
+ * 処理名: リモートツリーモック
+ * @param _cfg - 設定(未使用)
+ * @returns モックツリーデータ
  */
 export async function fetchRemoteTreeMock(_cfg: any) {
+  void _cfg
   return { headSha: 'deadbeef', files: [{ path: 'items.json', sha: 'sha1' }] }
 }
 

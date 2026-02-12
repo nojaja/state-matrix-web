@@ -8,6 +8,10 @@ import { defineStore } from 'pinia'
  * 実装理由: projectStore を選択状態のみに限定し、管理操作を分離するため
  */
 export const useProjectManagerStore = defineStore('projectManager', {
+  /**
+   * ステート定義
+   * @returns 初期ステート
+   */
   state: () => ({
     projects: [] as string[],
     loading: false

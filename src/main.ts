@@ -19,6 +19,11 @@ try {
     const WARN_THRESHOLD = 60; // calls per second considered excessive
     const LOG_INTERVAL = 5000;
 
+    /**
+     * 処理名: スタックトレースのサニタイズ
+     * @param stack - スタックトレース文字列
+     * @returns サニタイズされたスタック
+     */
     function sanitizeStack(stack: string | undefined) {
       if (!stack) return 'unknown';
       // Keep only top few frames and remove vendor/internal noise
@@ -26,6 +31,11 @@ try {
       return lines.join(' | ');
     }
 
+    /**
+     * 処理名: rAF監視ラッパー
+     * @param cb - フレームコールバック
+     * @returns リクエストID
+     */
     (globalThis as any).requestAnimationFrame = function (cb: FrameRequestCallback) {
       // capture stack where rAF was requested
       const stack = sanitizeStack((new Error()).stack);
@@ -57,22 +67,57 @@ try {
       }
 
       // Wrap callback to detect if it schedules more rAFs (sampled)
+      /**
+       * 処理名: コールバックラッパー
+       * @param t - タイムスタンプ
+       */
       const wrapped = (t: number) => {
         try { cb(t) } catch (e) { console.error('[rAF-monitor] callback error', e) }
       };
       return origRaf.call(globalThis, wrapped);
     };
 
+    /**
+     * 処理名: cAFラッパー
+     * @param id - リクエストID
+     * @returns キャンセル結果
+     */
     if (typeof origCaf === 'function') {
+      /**
+       * cancelAnimationFrameフック
+       * @param id - リクエストID
+       * @returns キャンセル結果
+       */
       (globalThis as any).cancelAnimationFrame = function (id: number) { return origCaf.call(globalThis, id) };
     }
 
     // Expose rAF monitor utilities for debugging in console
+    /**
+     * 処理名: rAFモニターユーティリティ
+     * @returns モニタリングユーティリティオブジェクト
+     */
     (globalThis as any).__rAFMonitor = {
+      /**
+       * スタックトップを取得
+       * @param limit - 取得する件数
+       * @returns スタック配列
+       */
       getTopStacks: (limit = 20) => Array.from(stackCounts.entries()).sort((a: any, b: any) => b[1] - a[1]).slice(0, limit),
+      /**
+       * スタックをクリア
+       * @returns クリア結果
+       */
       clear: () => stackCounts.clear(),
+      /**
+       * ウィンドウコール数を取得
+       * @returns コール数
+       */
       getWindowCalls: () => callsInWindow,
-      setWarnThreshold: (_v: number) => { /* noop: read-only in runtime */ }
+      /**
+       * 警告閾値設定（runtime では no-op）
+       * @returns なし
+       */
+      setWarnThreshold: () => { /* noop: read-only in runtime */ }
     };
 
     // Periodic logger to help offline analysis
@@ -86,7 +131,7 @@ try {
           }
         }
       } catch (e) {
-        // ignore
+        console.warn('[rAF-monitor] periodic summary error:', e)
       }
     }, LOG_INTERVAL);
   }
