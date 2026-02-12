@@ -30,7 +30,7 @@ describe('metadataStore sync/push coverage', () => {
       stat: jest.fn(async () => ({ size: 1 })),
       getIndex: jest.fn(async () => ({ head: 'h', files: ['f1'] })),
       getChangeSet: jest.fn(async () => ([{ path: 'a', content: 'x' }])),
-      push: jest.fn(async (p: any) => ({ ok: true }))
+      push: jest.fn(async (p: any) => { void p; return { ok: true } })
     }
 
     jest.spyOn(virtualFsManager, 'getCurrentVfs').mockReturnValue(vfs)

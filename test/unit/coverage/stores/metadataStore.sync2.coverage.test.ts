@@ -63,7 +63,12 @@ describe('metadataStore sync and writeProjectFile coverage', () => {
   it('writeProjectFile handles missing old file and writes new content', async () => {
     const filename = 'hello.txt'
     const tempName = `${filename}.tmp`
+    void tempName
 
+    /**
+     * writableFactory: テスト用の書き込みハンドルを作成します
+     * @returns {{write: Function, close: Function}} 書き込み用ハンドルのモック
+     */
     const writableFactory = () => ({ write: jest.fn(async () => {}), close: jest.fn(async () => {}) })
 
     const proj: any = {
