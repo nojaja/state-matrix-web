@@ -9,7 +9,7 @@ let useProjectStore: any
  * テスト準備: モジュールを動的 import して store ファクトリを取得する
  */
 beforeAll(async () => {
-  const storeMod = await import('../../../src/stores/projectStore')
+  const storeMod = await import('../../../../../src/stores/projectStore')
   useProjectStore = storeMod.useProjectStore
 })
 

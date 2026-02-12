@@ -15,7 +15,7 @@ beforeAll(async () => {
     init: jest.fn()
   };
   
-  const storeMod = await import('../../../src/stores/artifactStore');
+  const storeMod = await import('../../../../../src/stores/artifactStore');
   useArtifactStore = storeMod.useArtifactStore;
 });
 

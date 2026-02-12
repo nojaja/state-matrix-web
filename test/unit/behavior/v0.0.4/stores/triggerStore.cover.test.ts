@@ -16,7 +16,7 @@ beforeAll(async () => {
     init: jest.fn()
   } as any;
   
-  const storeMod = await import('../../../src/stores/triggerStore');
+  const storeMod = await import('../../../../../src/stores/triggerStore');
   useTriggerStore = storeMod.useTriggerStore;
 });
 

@@ -1,4 +1,4 @@
-import { threeway } from '../../../src/lib/repoSync'
+import { threeway } from '../../../../../src/lib/repoSync'
 
 describe('repoSync enhanced threeway', () => {
   it('merges array of objects with id when only one side changed', () => {

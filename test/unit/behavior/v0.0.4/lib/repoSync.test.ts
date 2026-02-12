@@ -1,4 +1,4 @@
-import { buildConflictsMap, threeway } from '../../../src/lib/repoSync'
+import { buildConflictsMap, threeway } from '../../../../../src/lib/repoSync'
 
 describe('repoSync', () => {
   it('buildConflictsMap uses id when present', () => {

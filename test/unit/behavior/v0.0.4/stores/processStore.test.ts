@@ -14,7 +14,7 @@ beforeAll(async () => {
     init: jest.fn()
   };
   
-  const storeMod = await import('../../../src/stores/processStore');
+  const storeMod = await import('../../../../../src/stores/processStore');
   useProcessStore = storeMod.useProcessStore;
 });
 

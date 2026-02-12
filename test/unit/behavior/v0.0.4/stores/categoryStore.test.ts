@@ -1,8 +1,8 @@
 // @ts-nocheck
 import { jest } from '@jest/globals';
 import { setActivePinia, createPinia } from 'pinia';
-import { useCategoryStore } from '../../../src/stores/categoryStore';
-import type { CategoryMaster } from '../../../src/types/models';
+import { useCategoryStore } from '../../../../../src/stores/categoryStore';
+import type { CategoryMaster } from '../../../../../src/types/models';
 
 beforeEach(() => {
   setActivePinia(createPinia());
@@ -65,7 +65,7 @@ describe('useCategoryStore actions', () => {
       init: jest.fn()
     };
     
-    const storeMod = await import('../../../src/stores/categoryStore');
+    const storeMod = await import('../../../../../src/stores/categoryStore');
     useCategoryStore = storeMod.useCategoryStore;
   });
 

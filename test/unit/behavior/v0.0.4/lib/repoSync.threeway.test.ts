@@ -1,4 +1,4 @@
-import { threeway, buildConflictsMap } from '../../../src/lib/repoSync'
+import { threeway, buildConflictsMap } from '../../../../../src/lib/repoSync'
 
 describe('repoSync.threeway - JSON/YAML/TEXT merge behavior', () => {
   it('resolves when only local changed from base (primitive)', () => {

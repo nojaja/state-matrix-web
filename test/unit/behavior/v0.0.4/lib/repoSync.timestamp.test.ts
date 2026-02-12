@@ -1,4 +1,4 @@
-import { mergeConflictsMaps } from '../../../src/lib/repoSync'
+import { mergeConflictsMaps } from '../../../../../src/lib/repoSync'
 
 describe('mergeConflictsMaps timestamp behavior', () => {
   it('overwrites when incoming timestamp is newer', () => {
