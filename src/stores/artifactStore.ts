@@ -100,7 +100,7 @@ export const useArtifactStore = defineStore('artifact', {
      * @returns Promise<void>
      */
     async add(partial: Omit<ArtifactType, 'ID' | 'CreateTimestamp' | 'LastUpdatedBy'>) {
-      const now = new Date().toISOString();
+      const now = new Date();
       const newItem: ArtifactType = {
         ID: generateUUID(),
         CreateTimestamp: now,

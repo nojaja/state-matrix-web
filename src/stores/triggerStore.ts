@@ -52,7 +52,11 @@ export const useTriggerStore = defineStore('data-mgmt-system/trigger', {
      * @returns 指定トリガーに紐づく `CausalRelationType[]` を返す関数
      */
     getRelationsByTriggerId(state) {
-      return (id: string) => state.relations.filter(r => r.ActionTriggerTypeID === id);
+      return (id: string) => {
+        const trigger = state.triggers.find((t: any) => t.ID === id);
+        if (!trigger || !trigger.ProcessTypeID) return [];
+        return state.relations.filter((r: any) => r.ProcessTypeID === trigger.ProcessTypeID);
+      };
     }
   },
   actions: {
@@ -158,9 +162,9 @@ export const useTriggerStore = defineStore('data-mgmt-system/trigger', {
      */
     async addTrigger(
       triggerPartial: Omit<ActionTriggerType, 'ID' | 'CreateTimestamp' | 'LastUpdatedBy'>,
-      relationsPartial: Omit<CausalRelationType, 'ID' | 'ActionTriggerTypeID' | 'CreateTimestamp' | 'LastUpdatedBy'>[]
+      relationsPartial: Omit<CausalRelationType, 'ID' | 'ProcessTypeID' | 'CreateTimestamp' | 'LastUpdatedBy'>[]
     ) {
-      const now = new Date().toISOString();
+      const now = new Date();
       const triggerId = generateUUID();
 
       const newTrigger: ActionTriggerType = {
@@ -175,7 +179,7 @@ export const useTriggerStore = defineStore('data-mgmt-system/trigger', {
       for (const rel of relationsPartial) {
         const newRel: CausalRelationType = {
           ID: generateUUID(),
-          ActionTriggerTypeID: triggerId,
+          ProcessTypeID: triggerPartial.ProcessTypeID,
           CreateTimestamp: now,
           LastUpdatedBy: 'User',
           ...rel
@@ -233,11 +237,9 @@ export const useTriggerStore = defineStore('data-mgmt-system/trigger', {
      * 実装理由: トリガー削除時に関連の整合性を保つため
      */
     async removeTrigger(id: string) {
-      // 関連も削除すべき
-      const rels = this.relations.filter(r => r.ActionTriggerTypeID === id);
-      for (const r of rels) {
-        await this._causalRelationRepository.delete(r.ID);
-      }
+      // Under new design, relations are scoped to ProcessTypeID and may be
+      // shared across triggers. Do not delete relations when removing a single
+      // trigger to avoid unintended data loss. Only delete the trigger itself.
       await this._actionTriggerRepository.delete(id);
       await this.fetchAll();
     }

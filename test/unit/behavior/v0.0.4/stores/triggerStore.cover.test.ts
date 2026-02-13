@@ -45,7 +45,7 @@ it('trigger store basic flows', async () => {
 
   // loadDraft
   const trigger = { ID: 't1', Name: 'T1', Description: '', CategoryID: 'c1', ProcessTypeID: '', Rollgroup: '', Timing: '', TimingDetail: '', ActionType: 0 };
-  const relations = [ { ID: 'r1', ActionTriggerTypeID: 't1', CrudType: 'Input', ArtifactTypeID: 'a1' }, { ID: 'r2', ActionTriggerTypeID: 't1', CrudType: 'Output', ArtifactTypeID: 'a2' } ];
+  const relations = [ { ID: 'r1', ProcessTypeID: 't1', CrudType: 'Input', ArtifactTypeID: 'a1' }, { ID: 'r2', ProcessTypeID: 't1', CrudType: 'Output', ArtifactTypeID: 'a2' } ];
   store.loadDraft(trigger as any, relations as any);
   expect(store.draft.inputArtifacts.length).toBe(1);
   expect(store.draft.outputArtifacts.length).toBe(1);

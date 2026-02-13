@@ -1,50 +1,52 @@
+export type uuid = string;
+
 export interface CategoryMaster {
-  ID: string;
+  ID: uuid;
   Name: string;
-  ParentID: string | null;
+  ParentID: uuid | null;
   Level: number;
   Path: string;
 }
 
 export interface ActionTriggerType {
-  ID: string;
+  ID: uuid;
   ActionType: number;
-  CategoryID: string;
-  ProcessTypeID: string;
+  CategoryID: uuid;
+  ProcessTypeID: uuid;
   Name: string;
   Description: string;
   Rollgroup: string;
   Timing: string;
   TimingDetail: string;
-  CreateTimestamp: string;
+  CreateTimestamp: Date;
   LastUpdatedBy: string;
 }
 
 export interface ArtifactType {
-  ID: string;
-  CategoryID: string;
+  ID: uuid;
+  CategoryID: uuid;
   Name: string;
   Content: string;
   Note: string;
-  CreateTimestamp: string;
+  CreateTimestamp: Date;
   LastUpdatedBy: string;
 }
 
 export interface CausalRelationType {
-  ID: string;
-  ActionTriggerTypeID: string;
-  ArtifactTypeID: string;
+  ID: uuid;
+  ProcessTypeID: uuid;
+  ArtifactTypeID: uuid;
   CrudType: string;
-  CreateTimestamp: string;
+  CreateTimestamp: Date;
   LastUpdatedBy: string;
 }
 
 export interface ProcessType {
-  ID: string;
-  CategoryID: string;
+  ID: uuid;
+  CategoryID: uuid;
   Name: string;
   Description: string;
-  CreateTimestamp: string;
+  CreateTimestamp: Date;
   LastUpdatedBy: string;
 }
 
@@ -81,7 +83,7 @@ export interface RepoMetadata {
 }
 
 export interface ConflictTriple {
-  id: string | null
+  id: uuid | null
   path: string
   format: 'json' | 'yaml' | 'text'
   base: string

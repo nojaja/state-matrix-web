@@ -36,7 +36,21 @@ export class VirtualFsRepository<T extends { ID: string }> {
           try {
             const path = `${this.entityDir}/${file}`;
             const text = await this.vfs.readFile(path);
-            return yaml.load(text) as T;
+            const data = yaml.load(text) as any;
+            // Compatibility mapping for causal relations: if old files contain
+            // ActionTriggerTypeID, map to ProcessTypeID by reading the referenced
+            // ActionTriggerTypes file.
+            if (this.entityDir === 'CausalRelationsTypes' && data && !data.ProcessTypeID && data.ActionTriggerTypeID) {
+              try {
+                const atPath = `ActionTriggerTypes/${data.ActionTriggerTypeID}.yaml`;
+                const atText = await this.vfs.readFile(atPath);
+                const atObj = yaml.load(atText) as any;
+                if (atObj && atObj.ProcessTypeID) data.ProcessTypeID = atObj.ProcessTypeID;
+              } catch (e) {
+                // ignore mapping failures, return original data
+              }
+            }
+            return data as T;
           } catch (error) {
             console.error(`Failed to parse ${file}`, error);
             return null;
@@ -62,7 +76,18 @@ export class VirtualFsRepository<T extends { ID: string }> {
     try {
       const path = `${this.entityDir}/${id}.yaml`;
       const text = await this.vfs.readFile(path);
-      return yaml.load(text) as T;
+      const data = yaml.load(text) as any;
+      if (this.entityDir === 'CausalRelationsTypes' && data && !data.ProcessTypeID && data.ActionTriggerTypeID) {
+        try {
+          const atPath = `ActionTriggerTypes/${data.ActionTriggerTypeID}.yaml`;
+          const atText = await this.vfs.readFile(atPath);
+          const atObj = yaml.load(atText) as any;
+          if (atObj && atObj.ProcessTypeID) data.ProcessTypeID = atObj.ProcessTypeID;
+        } catch (e) {
+          // ignore
+        }
+      }
+      return data as T;
     } catch {
       return null;
     }

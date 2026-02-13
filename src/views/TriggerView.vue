@@ -376,7 +376,7 @@ async function onSubmit() {
     if(!isValid.value) return;
 
     // Relations construction
-    const relations: Omit<CausalRelationType, 'ID' | 'ActionTriggerTypeID' | 'CreateTimestamp' | 'LastUpdatedBy'>[] = [];
+    const relations: Omit<CausalRelationType, 'ID' | 'ProcessTypeID' | 'CreateTimestamp' | 'LastUpdatedBy'>[] = [];
     inputArtifacts.forEach((a) => {
       relations.push({ ArtifactTypeID: a.id, CrudType: 'Input' });
     });

@@ -99,11 +99,11 @@ export const useProcessStore = defineStore('process', {
       * @param partial 新規作成に用いる `ProcessType` の部分情報
      */
     async add(partial: Omit<ProcessType, 'ID' | 'CreateTimestamp' | 'LastUpdatedBy'>) {
-      const now = new Date().toISOString();
+      const now = new Date();
       const newItem: ProcessType = {
         ID: generateUUID(),
         CreateTimestamp: now,
-        LastUpdatedBy: 'User', // 仮
+        LastUpdatedBy: 'User',
         ...partial
       };
       await this._processRepository.save(newItem);

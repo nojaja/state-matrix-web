@@ -34,7 +34,7 @@ describe('triggerStore actions', () => {
       { ID: 't1', ActionType: 1, CategoryID: 'c', ProcessTypeID: 'p', Name: 'T', Description: '', Rollgroup: '', Timing: '', TimingDetail: '', CreateTimestamp: '', LastUpdatedBy: '' }
     ]);
     jest.spyOn(store._causalRelationRepository, 'getAll').mockResolvedValueOnce([
-      { ID: 'r1', ActionTriggerTypeID: 't1', ArtifactTypeID: 'a', CrudType: 'C', CreateTimestamp: '', LastUpdatedBy: '' }
+      { ID: 'r1', ProcessTypeID: 'p', ArtifactTypeID: 'a', CrudType: 'C', CreateTimestamp: '', LastUpdatedBy: '' }
     ]);
     await store.fetchAll();
     expect(store.triggers.length).toBe(1);
@@ -56,12 +56,13 @@ describe('triggerStore actions', () => {
 
   it('removeTrigger deletes trigger and its relations', async () => {
     const store = useTriggerStore();
-    // prepare store state with relations
-    store.relations = [{ ID: 'r1', ActionTriggerTypeID: 't1', ArtifactTypeID: 'a', CrudType: 'C', CreateTimestamp: '', LastUpdatedBy: '' }];
+    // prepare store state with relations (process-scoped)
+    store.relations = [{ ID: 'r1', ProcessTypeID: 'p', ArtifactTypeID: 'a', CrudType: 'C', CreateTimestamp: '', LastUpdatedBy: '' }];
     jest.spyOn(store._causalRelationRepository, 'delete').mockResolvedValueOnce(undefined);
     jest.spyOn(store._actionTriggerRepository, 'delete').mockResolvedValueOnce(undefined);
     await store.removeTrigger('t1');
-    expect(store._causalRelationRepository.delete).toHaveBeenCalled();
+    // Under new design, removing a trigger should NOT delete process-scoped relations
+    expect(store._causalRelationRepository.delete).not.toHaveBeenCalled();
     expect(store._actionTriggerRepository.delete).toHaveBeenCalledWith('t1');
   });
 
@@ -71,7 +72,7 @@ describe('triggerStore actions', () => {
     jest.spyOn(store._causalRelationRepository, 'delete').mockResolvedValueOnce(undefined);
     jest.spyOn(store._causalRelationRepository, 'save').mockResolvedValueOnce(undefined);
     const trigger = { ID: 't1', ActionType: 1, CategoryID: 'c', ProcessTypeID: 'p', Name: 'T', Description: '', Rollgroup: '', Timing: '', TimingDetail: '', CreateTimestamp: '', LastUpdatedBy: '' };
-    const relations = [{ ID: 'r1', ActionTriggerTypeID: 't1', ArtifactTypeID: 'a', CrudType: 'C', CreateTimestamp: '', LastUpdatedBy: '' }];
+    const relations = [{ ID: 'r1', ProcessTypeID: 'p', ArtifactTypeID: 'a', CrudType: 'C', CreateTimestamp: '', LastUpdatedBy: '' }];
     await store.updateTrigger(trigger, relations, ['r2']);
     expect(store._actionTriggerRepository.save).toHaveBeenCalled();
     expect(store._causalRelationRepository.delete).toHaveBeenCalled();
@@ -86,9 +87,9 @@ describe('triggerStore actions', () => {
 
     const trigger = { ID: 't1', ActionType: 1, CategoryID: 'c', ProcessTypeID: 'p', Name: 'T', Description: '', Rollgroup: '', Timing: '', TimingDetail: '', CreateTimestamp: '', LastUpdatedBy: '' };
     const relations = [
-      { ID: 'r-in-1', ActionTriggerTypeID: 't1', ArtifactTypeID: 'a1', CrudType: 'Input', CreateTimestamp: '', LastUpdatedBy: '' },
-      { ID: 'r-out-1', ActionTriggerTypeID: 't1', ArtifactTypeID: 'a2', CrudType: 'Create', CreateTimestamp: '', LastUpdatedBy: '' },
-      { ID: 'r-out-2', ActionTriggerTypeID: 't1', ArtifactTypeID: 'a3', CrudType: 'Update', CreateTimestamp: '', LastUpdatedBy: '' }
+      { ID: 'r-in-1', ProcessTypeID: 't1', ArtifactTypeID: 'a1', CrudType: 'Input', CreateTimestamp: '', LastUpdatedBy: '' },
+      { ID: 'r-out-1', ProcessTypeID: 't1', ArtifactTypeID: 'a2', CrudType: 'Create', CreateTimestamp: '', LastUpdatedBy: '' },
+      { ID: 'r-out-2', ProcessTypeID: 't1', ArtifactTypeID: 'a3', CrudType: 'Update', CreateTimestamp: '', LastUpdatedBy: '' }
     ];
 
     // call loadDraft
