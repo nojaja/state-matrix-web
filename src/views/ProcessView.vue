@@ -6,20 +6,9 @@
         <span v-if="viewTabBadge > 0" class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-600 text-white" :aria-label="`プロセスタブの競合 ${viewTabBadge} 件`" tabindex="0" @click.prevent="openFirstScopeConflict" @keydown.enter.prevent="openFirstScopeConflict" @keydown.space.prevent="openFirstScopeConflict">{{ viewTabBadge }}</span>
       </h2>
       
-      <!-- Category Selector -->
+      <CategorySelector :path="selectedCategoryPath" @open="openCategorySelector" />
+
       <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700">カテゴリ : </label>
-        <div class="mt-1 flex items-center">
-          <button 
-            @click="openCategorySelector"
-            class="text-blue-600 hover:underline flex items-center"
-          >
-            <span v-if="selectedCategoryPath">{{ selectedCategoryPath }}</span>
-            <span v-else class="text-gray-400">（カテゴリを選択してください）</span>
-          </button>
-        </div>
-        </div>
-        <div class="mb-4">
         <label class="block text-sm font-medium text-gray-700">工程名称</label>
         <input v-model="form.Name" type="text" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" placeholder="プロセス名称" />
       </div>
@@ -114,12 +103,14 @@ import { ref, computed, onMounted, watch, onUnmounted } from 'vue';
 import { useRoute } from 'vue-router';
 import RepositoryWorkerClient from '../lib/repositoryWorkerClient';
 import { useProcessStore } from '../stores/processStore';
-import { useCategoryStore, type CategoryNode } from '../stores/categoryStore';
+import { useCategoryStore } from '../stores/categoryStore';
 import { useProjectStore } from '../stores/projectStore';
 import { useMetadataStore } from '../stores/metadataStore';
 import { useArtifactStore } from '../stores/artifactStore';
+import { useCategorySelector } from '../composables/useCategorySelector';
 import type { ProcessType } from '../types/models';
 import CategorySelectorModal from '../components/common/CategorySelectorModal.vue';
+import CategorySelector from '../components/common/CategorySelector.vue';
 import ModalDialog from '../components/common/ModalDialog.vue'
 import ThreeWayCompareModal from '../components/common/ThreeWayCompareModal.vue'
 import ConflictFields from '../components/common/ConflictFields.vue'
@@ -137,12 +128,44 @@ const categoryMap = computed(() => categoryStore.getMap);
 const form = processStore.draft as any;
 
 const isEditing = computed(() => !!form.ID);
-const selectedCategoryPath = computed(() => {
-  return form.CategoryID ? categoryStore.getFullPath(form.CategoryID) : null;
+
+/**
+ * 処理名: 現在カテゴリID取得
+ * @returns 現在編集中のカテゴリID
+ */
+function getCurrentCategoryId(): string | null | undefined {
+  return form.CategoryID;
+}
+
+/**
+ * 処理名: カテゴリパス解決
+ * @param categoryId カテゴリID
+ * @returns カテゴリのフルパス
+ */
+function resolveCategoryPath(categoryId: string): string | null {
+  return categoryStore.getFullPath(categoryId);
+}
+
+/**
+ * 処理名: カテゴリID反映
+ * @param categoryId カテゴリID
+ */
+function applyCategoryId(categoryId: string): void {
+  processStore.setDraft({ CategoryID: categoryId });
+}
+
+const {
+  showCategorySelector,
+  selectedCategoryPath,
+  openCategorySelector,
+  onCategorySelected
+} = useCategorySelector({
+  categoryId: getCurrentCategoryId,
+  getFullPath: resolveCategoryPath,
+  applyCategoryId
 });
 const isValid = computed(() => form.Name && form.CategoryID);
 
-const showCategorySelector = ref(false);
 const showCompareModal = ref(false)
 const compareKey = ref<string | null>(null)
 const route = useRoute()
@@ -233,25 +256,6 @@ onMounted(() => {
  */
 function getCategoryName(id: string) {
   return categoryMap.value[id]?.Name || id;
-}
-
-/**
- * 処理名: カテゴリ選択モーダルを開く
- *
- * 処理概要: カテゴリ選択用モーダルを表示する
- */
-function openCategorySelector() {
-  showCategorySelector.value = true;
-}
-
-/**
- * 処理名: カテゴリ選択ハンドラ
- * @param node 選択された `CategoryNode`
- *
- * 処理概要: フォームに選択カテゴリを設定する
- */
-function onCategorySelected(node: CategoryNode) {
-  processStore.setDraft({ CategoryID: node.ID });
 }
 
 function onSelectedProcessIdUpdated(processId: string) {

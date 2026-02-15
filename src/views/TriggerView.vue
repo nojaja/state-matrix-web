@@ -108,9 +108,10 @@ import RepositoryWorkerClient from '../lib/repositoryWorkerClient';
 import { useTriggerStore } from '../stores/triggerStore';
 import { useProjectStore } from '../stores/projectStore';
 import { useMetadataStore } from '../stores/metadataStore';
-import { useCategoryStore, type CategoryNode } from '../stores/categoryStore';
+import { useCategoryStore } from '../stores/categoryStore';
 import { useProcessStore } from '../stores/processStore';
 import { useArtifactStore } from '../stores/artifactStore';
+import { useCategorySelector } from '../composables/useCategorySelector';
 import type { ActionTriggerType } from '../types/models';
 import CategorySelectorModal from '../components/common/CategorySelectorModal.vue';
 import CategorySelector from '../components/common/CategorySelector.vue';
@@ -131,8 +132,17 @@ const form = triggerStore.draft as any;
 
 // Editing state for relations is persisted in store.draft
 const isEditing = computed(() => !!form.ID);
-const selectedCategoryPath = computed(() => {
-  return form.CategoryID ? categoryStore.getFullPath(form.CategoryID) : null;
+const {
+  showCategorySelector,
+  selectedCategoryPath,
+  openCategorySelector,
+  onCategorySelected
+} = useCategorySelector({
+  categoryId: () => form.CategoryID,
+  getFullPath: (categoryId: string) => categoryStore.getFullPath(categoryId),
+  applyCategoryId: (categoryId: string) => {
+    triggerStore.setDraft({ CategoryID: categoryId });
+  }
 });
 const inputArtifacts = triggerStore.draft.inputArtifacts as {id: string, name: string}[];
 const outputArtifacts = triggerStore.draft.outputArtifacts as {id: string, name: string, crud?: 'Create' | 'Update'}[];
@@ -141,7 +151,6 @@ const selectedProcess = computed(() => processStore.processes.find(p => p.ID ===
 const isValid = computed(() => form.Name && form.CategoryID && form.ProcessTypeID);
 
 // Modals
-const showCategorySelector = ref(false);
 const showCompareModal = ref(false)
 const compareKey = ref<string | null>(null)
 const route = useRoute()
@@ -226,17 +235,6 @@ function getCategoryName(id: string) { return categoryStore.getMap[id]?.Name ?? 
 function getProcessName(id: string) { return processStore.processes.find(p => p.ID === id)?.Name ?? id; }
 
 // --- Actions ---
-
-/**
- * 処理名: カテゴリ選択モーダルを開く
- */
-function openCategorySelector() { showCategorySelector.value = true; }
-
-/**
- * 処理名: カテゴリ選択ハンドラ
- * @param node 選択された `CategoryNode`
- */
-function onCategorySelected(node: CategoryNode) { form.CategoryID = node.ID; }
 
 /**
  * 処理名: プロセス選択反映
