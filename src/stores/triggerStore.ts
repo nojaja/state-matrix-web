@@ -154,15 +154,14 @@ export const useTriggerStore = defineStore('data-mgmt-system/trigger', {
     /**
      * 処理名: トリガー追加
      * @param triggerPartial トリガー本体の部分情報
-     * @param relationsPartial 付随する因果関係の配列
      *
-     * 処理概要: トリガー本体と関連情報を作成して永続化する
+     * 処理概要: トリガー本体を作成して永続化する
      *
-     * 実装理由: UI からの一括登録をサポートするため
+     * 実装理由: ActionTriggerType の保存責務を分離するため
      */
     async addTrigger(
       triggerPartial: Omit<ActionTriggerType, 'ID' | 'CreateTimestamp' | 'LastUpdatedBy'>,
-      relationsPartial: Omit<CausalRelationType, 'ID' | 'ProcessTypeID' | 'CreateTimestamp' | 'LastUpdatedBy'>[]
+      _relationsPartial?: Omit<CausalRelationType, 'ID' | 'ProcessTypeID' | 'CreateTimestamp' | 'LastUpdatedBy'>[]
     ) {
       const now = new Date();
       const triggerId = generateUUID();
@@ -176,18 +175,12 @@ export const useTriggerStore = defineStore('data-mgmt-system/trigger', {
 
       await this._actionTriggerRepository.save(newTrigger);
 
-      for (const rel of relationsPartial) {
-        const newRel: CausalRelationType = {
-          ID: generateUUID(),
-          ProcessTypeID: triggerPartial.ProcessTypeID,
-          CreateTimestamp: now,
-          LastUpdatedBy: 'User',
-          ...rel
-        };
-        await this._causalRelationRepository.save(newRel);
-      }
-
       await this.fetchAll();
+
+      return {
+        triggerId,
+        processTypeId: triggerPartial.ProcessTypeID
+      };
     },
 
     /**

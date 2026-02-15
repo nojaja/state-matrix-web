@@ -108,6 +108,7 @@ export const useProcessStore = defineStore('process', {
       };
       await this._processRepository.save(newItem);
       await this.fetchAll();
+      return { processId: newItem.ID };
     },
     /**
      * 処理名: 更新

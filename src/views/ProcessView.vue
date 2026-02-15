@@ -29,6 +29,23 @@
         <textarea v-model="form.Description" rows="3" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" placeholder="プロセスの説明"></textarea>
       </div>
 
+      <InputOutputDefinitionComponent
+        ref="inputOutputDefinitionRef"
+        :selected-process-id="form.Name"
+        :relation-process-id="form.ID"
+        :selected-process-name="form.Name ?? ''"
+        :selected-process-description="form.Description ?? ''"
+        :input-artifacts="inputArtifacts"
+        :output-artifacts="outputArtifacts"
+        :process-items="processItems"
+        :artifact-items="artifactItems"
+        :show-process-setting-button="false"
+        @update:selected-process-id="onSelectedProcessIdUpdated"
+        @update:input-artifacts="onUpdateInputArtifacts"
+        @update:output-artifacts="onUpdateOutputArtifacts"
+        @remove-artifact="onRemoveArtifact"
+      />
+
       <button 
         @click="onSubmit"
         class="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600 font-bold disabled:opacity-50"
@@ -100,16 +117,19 @@ import { useProcessStore } from '../stores/processStore';
 import { useCategoryStore, type CategoryNode } from '../stores/categoryStore';
 import { useProjectStore } from '../stores/projectStore';
 import { useMetadataStore } from '../stores/metadataStore';
+import { useArtifactStore } from '../stores/artifactStore';
 import type { ProcessType } from '../types/models';
 import CategorySelectorModal from '../components/common/CategorySelectorModal.vue';
 import ModalDialog from '../components/common/ModalDialog.vue'
 import ThreeWayCompareModal from '../components/common/ThreeWayCompareModal.vue'
 import ConflictFields from '../components/common/ConflictFields.vue'
+import InputOutputDefinitionComponent from '../components/trigger/InputOutputDefinitionComponent.vue'
 
 const processStore = useProcessStore();
 const categoryStore = useCategoryStore();
 const projectStore = useProjectStore();
 const metadataStore = useMetadataStore();
+const artifactStore = useArtifactStore();
 
 const processes = computed(() => processStore.processes);
 const categoryMap = computed(() => categoryStore.getMap);
@@ -126,6 +146,35 @@ const showCategorySelector = ref(false);
 const showCompareModal = ref(false)
 const compareKey = ref<string | null>(null)
 const route = useRoute()
+
+type InputOutputDefinitionExposed = {
+  saveCausalRelations: (params: { processTypeId: string; triggerId?: string }) => Promise<void>;
+};
+const inputOutputDefinitionRef = ref<InputOutputDefinitionExposed | null>(null);
+
+type InputArtifactDraft = {
+  id: string;
+  name: string;
+};
+
+type OutputArtifactDraft = {
+  id: string;
+  name: string;
+  crud?: 'Create' | 'Update';
+};
+
+const inputArtifacts = ref<InputArtifactDraft[]>([]);
+const outputArtifacts = ref<OutputArtifactDraft[]>([]);
+const processItems = computed(() => processStore.processes.map(p => ({
+  id: p.ID,
+  name: p.Name,
+  description: p.Description
+})));
+const artifactItems = computed(() => artifactStore.artifacts.map(a => ({
+  id: a.ID,
+  name: a.Name,
+  description: a.Note
+})));
 
 const viewTabBadge = computed(() => {
   const proj = projectStore.selectedProject
@@ -172,6 +221,7 @@ function openCompare(key: string) {
 onMounted(() => {
   processStore.init();
   categoryStore.init();
+  artifactStore.init();
 });
 
 /**
@@ -202,6 +252,26 @@ function openCategorySelector() {
  */
 function onCategorySelected(node: CategoryNode) {
   processStore.setDraft({ CategoryID: node.ID });
+}
+
+function onSelectedProcessIdUpdated(processId: string) {
+  form.Name = processId;
+}
+
+function onUpdateInputArtifacts(value: InputArtifactDraft[]) {
+  inputArtifacts.value = value;
+}
+
+function onUpdateOutputArtifacts(value: OutputArtifactDraft[]) {
+  outputArtifacts.value = value;
+}
+
+function onRemoveArtifact(payload: { index: number; mode: 'input' | 'output' }) {
+  if (payload.mode === 'input') {
+    inputArtifacts.value = inputArtifacts.value.filter((_, idx) => idx !== payload.index);
+    return;
+  }
+  outputArtifacts.value = outputArtifacts.value.filter((_, idx) => idx !== payload.index);
 }
 
 /**
@@ -235,6 +305,8 @@ async function onDelete(proc: ProcessType) {
 async function onSubmit() {
   if(!isValid.value) return;
 
+  let savedProcessId = '';
+
   if (isEditing.value) {
     // Update
     const target = processStore.processes.find(p => p.ID === form.ID);
@@ -245,15 +317,25 @@ async function onSubmit() {
         Description: form.Description,
         CategoryID: form.CategoryID
       });
+      savedProcessId = target.ID;
     }
   } else {
     // Add
-    await processStore.add({
+    const added = await processStore.add({
       Name: form.Name,
       Description: form.Description,
       CategoryID: form.CategoryID
     });
+    savedProcessId = added?.processId ?? '';
   }
+
+  if (savedProcessId && inputOutputDefinitionRef.value) {
+    await inputOutputDefinitionRef.value.saveCausalRelations({
+      processTypeId: savedProcessId,
+      triggerId: ''
+    });
+  }
+
   resetForm();
 
   // Post-save: remove conflict and sync
