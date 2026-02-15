@@ -29,84 +29,21 @@
         </div>
       </div>
 
-      <!-- Arrow Flow Section -->
-      <div class="border-t pt-4 mt-4">
-         <h3 class="text-md font-semibold mb-2">プロセス・入出力定義</h3>
-         <div class="flex flex-col md:flex-row items-stretch gap-2 overflow-x-auto p-2 bg-gray-50 rounded">
-            
-            <!-- Input Artifacts -->
-            <div class="flex-1 bg-white border rounded p-2 min-w-[200px] flex flex-col">
-               <div class="font-bold text-center bg-gray-200 py-1 mb-2 rounded">インプット作成物</div>
-               <div class="flex-1 space-y-2">
-                  <div v-for="(art, idx) in inputArtifacts" :key="idx" class="flex justify-between items-center border p-1 rounded">
-                     <span class="truncate text-sm" :title="art.name">{{ art.name }}</span>
-                     <button @click="removeArtifact(idx, 'input')" class="text-red-500 hover:bg-red-50 rounded">
-                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                     </button>
-                  </div>
-               </div>
-               <button @click="openArtifactSelector('input')" class="mt-2 w-full py-1 border-2 border-dashed border-gray-300 text-gray-500 rounded hover:border-gray-400 hover:text-gray-600">
-                  + 追加
-               </button>
-            </div>
-
-            <!-- Arrow -->
-            <div class="flex items-center justify-center">
-                 <svg class="h-8 w-8 text-gray-400 transform rotate-90 md:rotate-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                 </svg>
-            </div>
-
-            <!-- Process -->
-            <div class="flex-1 bg-blue-50 border border-blue-200 rounded p-2 min-w-[200px] flex flex-col items-center justify-center">
-               <div class="font-bold text-center mb-2">プロセス</div>
-               <div v-if="selectedProcess" class="bg-white border p-3 rounded shadow-sm w-full text-center">
-                  <div class="font-bold text-blue-800">{{ selectedProcess.Name }}</div>
-                  <div class="text-xs text-gray-500 truncate">{{ selectedProcess.Description }}</div>
-               </div>
-               <div v-else class="text-gray-400 text-sm">未設定</div>
-               <button @click="openProcessSelector" class="mt-2 text-sm text-blue-600 underline">
-                  {{ selectedProcess ? '変更' : '設定' }}
-               </button>
-            </div>
-
-            <!-- Arrow -->
-            <div class="flex items-center justify-center">
-                 <svg class="h-8 w-8 text-gray-400 transform rotate-90 md:rotate-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                 </svg>
-            </div>
-
-             <!-- Output Artifacts -->
-            <div class="flex-1 bg-white border rounded p-2 min-w-[200px] flex flex-col">
-               <div class="font-bold text-center bg-gray-200 py-1 mb-2 rounded">アウトプット作成物</div>
-               <div class="flex-1 space-y-2">
-                  <div v-for="(art, idx) in outputArtifacts" :key="idx" class="flex justify-between items-center border p-1 rounded">
-                    <div class="flex items-center space-x-3">
-                      <span class="truncate text-sm" :title="art.name">{{ art.name }}</span>
-                      <div class="text-sm text-gray-600 flex items-center space-x-3">
-                        <label class="flex items-center space-x-1">
-                          <input type="radio" :name="`out-crud-` + idx" v-model="art.crud" value="Create" class="w-4 h-4" />
-                          <span class="text-xs">作成</span>
-                        </label>
-                        <label class="flex items-center space-x-1">
-                          <input type="radio" :name="`out-crud-` + idx" v-model="art.crud" value="Update" class="w-4 h-4" />
-                          <span class="text-xs">更新</span>
-                        </label>
-                      </div>
-                    </div>
-                    <button @click="removeArtifact(idx, 'output')" class="text-red-500 hover:bg-red-50 rounded">
-                      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                    </button>
-                  </div>
-               </div>
-               <button @click="openArtifactSelector('output')" class="mt-2 w-full py-1 border-2 border-dashed border-gray-300 text-gray-500 rounded hover:border-gray-400 hover:text-gray-600">
-                  + 追加
-               </button>
-            </div>
-
-         </div>
-      </div>
+      <InputOutputDefinitionComponent
+        ref="inputOutputDefinitionRef"
+        :selected-process-id="form.ProcessTypeID"
+        :selected-process-name="selectedProcess?.Name ?? ''"
+        :selected-process-description="selectedProcess?.Description ?? ''"
+        :input-artifacts="inputArtifacts"
+        :output-artifacts="outputArtifacts"
+        :process-items="processItems"
+        :artifact-items="artifactItems"
+        :show-process-setting-button="true"
+        @update:selected-process-id="onSelectedProcessIdUpdated"
+        @remove-artifact="onRemoveArtifactFromComponent"
+        @update:input-artifacts="onUpdateInputArtifacts"
+        @update:output-artifacts="onUpdateOutputArtifacts"
+      />
 
       <button 
         @click="onSubmit"
@@ -161,18 +98,6 @@
     <ModalDialog v-model="showCompareModal" title="競合解消">
       <ThreeWayCompareModal :keyId="compareKey || ''" />
     </ModalDialog>
-    <SimpleSelectorModal 
-       v-model="showProcessSelector" 
-       title="プロセス選択" 
-       :items="processItems" 
-       @confirm="onProcessSelected" 
-    />
-     <SimpleSelectorModal 
-       v-model="showArtifactSelector" 
-       title="作成物選択" 
-       :items="artifactItems" 
-       @confirm="onArtifactSelected" 
-    />
   </div>
 </template>
 
@@ -183,15 +108,16 @@ import RepositoryWorkerClient from '../lib/repositoryWorkerClient';
 import { useTriggerStore } from '../stores/triggerStore';
 import { useProjectStore } from '../stores/projectStore';
 import { useMetadataStore } from '../stores/metadataStore';
-import { useCategoryStore, type CategoryNode } from '../stores/categoryStore';
+import { useCategoryStore } from '../stores/categoryStore';
 import { useProcessStore } from '../stores/processStore';
 import { useArtifactStore } from '../stores/artifactStore';
-import type { ActionTriggerType, CausalRelationType } from '../types/models';
+import { useCategorySelector } from '../composables/useCategorySelector';
+import type { ActionTriggerType } from '../types/models';
 import CategorySelectorModal from '../components/common/CategorySelectorModal.vue';
 import CategorySelector from '../components/common/CategorySelector.vue';
-import SimpleSelectorModal from '../components/common/SimpleSelectorModal.vue';
 import ModalDialog from '../components/common/ModalDialog.vue'
 import ThreeWayCompareModal from '../components/common/ThreeWayCompareModal.vue'
+import InputOutputDefinitionComponent from '../components/trigger/InputOutputDefinitionComponent.vue'
 
 const triggerStore = useTriggerStore();
 const projectStore = useProjectStore();
@@ -206,23 +132,45 @@ const form = triggerStore.draft as any;
 
 // Editing state for relations is persisted in store.draft
 const isEditing = computed(() => !!form.ID);
-const selectedCategoryPath = computed(() => {
-  return form.CategoryID ? categoryStore.getFullPath(form.CategoryID) : null;
+const {
+  showCategorySelector,
+  selectedCategoryPath,
+  openCategorySelector,
+  onCategorySelected
+} = useCategorySelector({
+  /**
+  * 処理名: 現在カテゴリID取得
+  * @returns 現在のカテゴリID
+   */
+  categoryId: () => form.CategoryID,
+  /**
+  * 処理名: カテゴリフルパス取得
+   * @param categoryId
+  * @returns カテゴリのフルパス
+   */
+  getFullPath: (categoryId: string) => categoryStore.getFullPath(categoryId),
+  /**
+   *
+   * @param categoryId
+   */
+  applyCategoryId: (categoryId: string) => {
+    triggerStore.setDraft({ CategoryID: categoryId });
+  }
 });
 const inputArtifacts = triggerStore.draft.inputArtifacts as {id: string, name: string}[];
-const outputArtifacts = triggerStore.draft.outputArtifacts as {id: string, name: string, crud?: string}[];
+const outputArtifacts = triggerStore.draft.outputArtifacts as {id: string, name: string, crud?: 'Create' | 'Update'}[];
 const selectedProcess = computed(() => processStore.processes.find(p => p.ID === form.ProcessTypeID));
 
 const isValid = computed(() => form.Name && form.CategoryID && form.ProcessTypeID);
 
 // Modals
-const showCategorySelector = ref(false);
-const showProcessSelector = ref(false);
-const showArtifactSelector = ref(false);
-const artifactSelectorMode = ref<'input' | 'output'>('input');
 const showCompareModal = ref(false)
 const compareKey = ref<string | null>(null)
 const route = useRoute()
+type InputOutputDefinitionExposed = {
+  saveCausalRelations: Function;
+};
+const inputOutputDefinitionRef = ref<InputOutputDefinitionExposed | null>(null);
 
 const viewTabBadge = computed(() => {
   const proj = projectStore.selectedProject
@@ -267,8 +215,8 @@ function openCompare(key: string) {
 }
 
 const processItems = computed(() => processStore.processes.map(p => ({
-    id: p.ID, 
-    name: p.Name, 
+    id: p.ID,
+    name: p.Name,
     description: p.Description
 })));
 
@@ -279,7 +227,7 @@ const artifactItems = computed(() => artifactStore.artifacts.map(a => ({
 })));
 
 onMounted(() => {
-   triggerStore.init(); 
+   triggerStore.init();
    categoryStore.init();
    processStore.init();
    artifactStore.init();
@@ -302,57 +250,11 @@ function getProcessName(id: string) { return processStore.processes.find(p => p.
 // --- Actions ---
 
 /**
- * 処理名: カテゴリ選択モーダルを開く
+ * 処理名: プロセス選択反映
+ * @param processId 選択されたプロセスID
  */
-function openCategorySelector() { showCategorySelector.value = true; }
-
-/**
- * 処理名: カテゴリ選択ハンドラ
- * @param node 選択された `CategoryNode`
- */
-function onCategorySelected(node: CategoryNode) { form.CategoryID = node.ID; }
-
-/**
- * 処理名: プロセス選択モーダルを開く
- */
-function openProcessSelector() { showProcessSelector.value = true; }
-
-/**
- * 処理名: プロセス選択ハンドラ
- * @param item 選択された項目 `{ id: string }`
- */
-/**
- * 処理名: プロセス選択ハンドラ
- * @param item 選択された項目 `{ id: string }`
- * @param item.id 選択されたプロセスの ID
- */
-function onProcessSelected(item: {id: string}) { form.ProcessTypeID = item.id; }
-
-/**
- * 処理名: 作成物選択モーダルを開く
- * @param mode 'input' か 'output'
- */
-function openArtifactSelector(mode: 'input' | 'output') {
-    artifactSelectorMode.value = mode;
-    showArtifactSelector.value = true;
-}
-
-/**
- * 処理名: 作成物選択ハンドラ
- * @param item 選択された項目 `{ id: string, name: string }`
- * @param item.id 選択された作成物の ID
- * @param item.name 選択された作成物の表示名
- */
-function onArtifactSelected(item: {id: string, name: string}) {
-  if(artifactSelectorMode.value === 'input') {
-    if(!inputArtifacts.some(a => a.id === item.id)) {
-      inputArtifacts.push({ id: item.id, name: item.name });
-    }
-  } else {
-    if(!outputArtifacts.some(a => a.id === item.id)) {
-      outputArtifacts.push({ id: item.id, name: item.name, crud: 'Create' });
-    }
-  }
+function onSelectedProcessIdUpdated(processId: string) {
+  form.ProcessTypeID = processId;
 }
 
 /**
@@ -365,6 +267,32 @@ function removeArtifact(idx: number, mode: 'input' | 'output') {
   else outputArtifacts.splice(idx, 1);
 }
 
+/**
+ * 処理名: 部品からの作成物削除ハンドラ
+ * @param payload 削除位置と対象モード
+ * @param payload.index 削除位置
+ * @param payload.mode 対象モード
+ */
+function onRemoveArtifactFromComponent(payload: { index: number; mode: 'input' | 'output' }) {
+  removeArtifact(payload.index, payload.mode);
+}
+
+/**
+ * 処理名: 入力作成物配列更新
+ * @param value 更新後配列
+ */
+function onUpdateInputArtifacts(value: { id: string; name: string }[]) {
+  inputArtifacts.splice(0, inputArtifacts.length, ...value);
+}
+
+/**
+ * 処理名: 出力作成物配列更新
+ * @param value 更新後配列
+ */
+function onUpdateOutputArtifacts(value: { id: string; name: string; crud?: 'Create' | 'Update' }[]) {
+  outputArtifacts.splice(0, outputArtifacts.length, ...value);
+}
+
 // --- Submit / Load ---
 
 /**
@@ -374,20 +302,12 @@ function removeArtifact(idx: number, mode: 'input' | 'output') {
  */
 async function onSubmit() {
     if(!isValid.value) return;
-
-    // Relations construction
-    const relations: Omit<CausalRelationType, 'ID' | 'ProcessTypeID' | 'CreateTimestamp' | 'LastUpdatedBy'>[] = [];
-    inputArtifacts.forEach((a) => {
-      relations.push({ ArtifactTypeID: a.id, CrudType: 'Input' });
-    });
-    outputArtifacts.forEach((a) => {
-      relations.push({ ArtifactTypeID: a.id, CrudType: a.crud ?? 'Create' });
-    });
+    let saved: { triggerId: string; processTypeId: string } | null = null;
 
     if(isEditing.value) {
         // Edit mode logic: Remove and Re-Add for simplicity in this prototype
         await triggerStore.removeTrigger(form.ID);
-        await triggerStore.addTrigger({
+        saved = await triggerStore.addTrigger({
             Name: form.Name,
             Description: form.Description,
             CategoryID: form.CategoryID,
@@ -396,10 +316,10 @@ async function onSubmit() {
             Timing: form.Timing,
             TimingDetail: form.TimingDetail,
             ActionType: form.ActionType
-        }, relations);
+        });
         
     } else {
-        await triggerStore.addTrigger({
+        saved = await triggerStore.addTrigger({
             Name: form.Name,
             Description: form.Description,
             CategoryID: form.CategoryID,
@@ -408,7 +328,13 @@ async function onSubmit() {
             Timing: form.Timing,
             TimingDetail: form.TimingDetail,
             ActionType: 0
-        }, relations);
+        });
+    }
+
+    if (saved?.processTypeId && inputOutputDefinitionRef.value) {
+      await inputOutputDefinitionRef.value.saveCausalRelations({
+        processTypeId: saved.processTypeId
+      });
     }
     
     resetForm();
@@ -531,19 +457,6 @@ function onEdit(t: ActionTriggerType) {
     form.Timing = t.Timing;
     form.TimingDetail = t.TimingDetail;
     form.ActionType = t.ActionType;
-    
-    // Load relations into draft and resolve names
-    const rels = triggerStore.getRelationsByTriggerId(t.ID);
-    triggerStore.loadDraft(t, rels as CausalRelationType[]);
-    // Resolve artifact names from artifactStore (preserve crud for outputs)
-    // resolve names in-place to preserve the original array references
-    triggerStore.draft.inputArtifacts.forEach((a: any) => {
-      a.name = artifactStore.artifacts.find(x => x.ID === a.id)?.Name ?? 'Unknown';
-    });
-    triggerStore.draft.outputArtifacts.forEach((a: any) => {
-      a.name = artifactStore.artifacts.find(x => x.ID === a.id)?.Name ?? 'Unknown';
-      if (!a.crud) a.crud = 'Create';
-    });
 }
 
 /**

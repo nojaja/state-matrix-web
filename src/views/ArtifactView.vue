@@ -88,7 +88,8 @@ import RepositoryWorkerClient from '../lib/repositoryWorkerClient';
 import { useArtifactStore } from '../stores/artifactStore';
 import { useProjectStore } from '../stores/projectStore';
 import { useMetadataStore } from '../stores/metadataStore';
-import { useCategoryStore, type CategoryNode } from '../stores/categoryStore';
+import { useCategoryStore } from '../stores/categoryStore';
+import { useCategorySelector } from '../composables/useCategorySelector';
 import type { ArtifactType } from '../types/models';
 import CategorySelectorModal from '../components/common/CategorySelectorModal.vue';
 import CategorySelector from '../components/common/CategorySelector.vue';
@@ -106,12 +107,33 @@ const categoryMap = computed(() => categoryStore.getMap);
 const form = artifactStore.draft as any;
 
 const isEditing = computed(() => !!form.ID);
-const selectedCategoryPath = computed(() => {
-  return form.CategoryID ? categoryStore.getFullPath(form.CategoryID) : null;
+const {
+  showCategorySelector,
+  selectedCategoryPath,
+  openCategorySelector,
+  onCategorySelected
+} = useCategorySelector({
+  /**
+  * 処理名: 現在カテゴリID取得
+  * @returns 現在のカテゴリID
+   */
+  categoryId: () => form.CategoryID,
+  /**
+  * 処理名: カテゴリフルパス取得
+   * @param categoryId
+  * @returns カテゴリのフルパス
+   */
+  getFullPath: (categoryId: string) => categoryStore.getFullPath(categoryId),
+  /**
+   *
+   * @param categoryId
+   */
+  applyCategoryId: (categoryId: string) => {
+    artifactStore.setDraft({ CategoryID: categoryId });
+  }
 });
 const isValid = computed(() => form.Name && form.CategoryID);
 
-const showCategorySelector = ref(false);
 const showCompareModal = ref(false)
 const compareKey = ref<string | null>(null)
 const route = useRoute()
@@ -172,25 +194,6 @@ onMounted(() => {
  */
 function getCategoryName(id: string) {
   return categoryMap.value[id]?.Name || id;
-}
-
-/**
- * 処理名: カテゴリ選択モーダルを開く
- *
- * 処理概要: カテゴリ選択モーダルを表示する
- */
-function openCategorySelector() {
-  showCategorySelector.value = true;
-}
-
-/**
- * 処理名: カテゴリ選択ハンドラ
- * @param node 選択された `CategoryNode`
- *
- * 処理概要: フォームのカテゴリ ID を設定する
- */
-function onCategorySelected(node: CategoryNode) {
-  artifactStore.setDraft({ CategoryID: node.ID });
 }
 
 /**

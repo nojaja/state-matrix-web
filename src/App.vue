@@ -7,6 +7,7 @@ import { useArtifactStore } from './stores/artifactStore'
 import { useCategoryStore } from './stores/categoryStore'
 import { useProcessStore } from './stores/processStore'
 import { useTriggerStore } from './stores/triggerStore'
+import { useCausalRelationStore } from './stores/causalRelationStore'
 import { virtualFsManager } from './lib/virtualFsSingleton'
 import type { VirtualFsInstance } from './types/models'
 
@@ -16,6 +17,7 @@ const artifactStore = useArtifactStore()
 const categoryStore = useCategoryStore()
 const processStore = useProcessStore()
 const triggerStore = useTriggerStore()
+const causalRelationStore = useCausalRelationStore()
 const router = useRouter()
 
 // shared VirtualFsManager singleton (created in src/lib/virtualFsSingleton.ts)
@@ -50,7 +52,8 @@ const switchProject = async (projectName: string | null) => {
     categoryStore.categories = []
     processStore.processes = []
     triggerStore.triggers = []
-    triggerStore.relations = []
+    causalRelationStore.triggers = []
+    causalRelationStore.relations = []
     virtualFsManager.closeProject()
     updateBadgeCache()
     return
@@ -65,13 +68,15 @@ const switchProject = async (projectName: string | null) => {
     categoryStore.initFromVirtualFS(vfs)
     processStore.initFromVirtualFS(vfs)
     triggerStore.initFromVirtualFS(vfs)
+    causalRelationStore.initFromVirtualFS(vfs)
 
     // 並行して全ストアを初期化（fetchAll 呼び出し）
     await Promise.all([
       artifactStore.init(),
       categoryStore.init(),
       processStore.init(),
-      triggerStore.init()
+      triggerStore.init(),
+      causalRelationStore.init()
     ])
 
     // メタデータ初期化

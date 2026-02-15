@@ -97,6 +97,7 @@ export const useProcessStore = defineStore('process', {
      *
      * 実装理由: 新規プロセス作成機能を提供するため
       * @param partial 新規作成に用いる `ProcessType` の部分情報
+    * @returns 生成したプロセスID
      */
     async add(partial: Omit<ProcessType, 'ID' | 'CreateTimestamp' | 'LastUpdatedBy'>) {
       const now = new Date();
@@ -108,6 +109,7 @@ export const useProcessStore = defineStore('process', {
       };
       await this._processRepository.save(newItem);
       await this.fetchAll();
+      return { processId: newItem.ID };
     },
     /**
      * 処理名: 更新

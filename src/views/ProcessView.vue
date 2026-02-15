@@ -6,20 +6,9 @@
         <span v-if="viewTabBadge > 0" class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-600 text-white" :aria-label="`プロセスタブの競合 ${viewTabBadge} 件`" tabindex="0" @click.prevent="openFirstScopeConflict" @keydown.enter.prevent="openFirstScopeConflict" @keydown.space.prevent="openFirstScopeConflict">{{ viewTabBadge }}</span>
       </h2>
       
-      <!-- Category Selector -->
+      <CategorySelector :path="selectedCategoryPath" @open="openCategorySelector" />
+
       <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700">カテゴリ : </label>
-        <div class="mt-1 flex items-center">
-          <button 
-            @click="openCategorySelector"
-            class="text-blue-600 hover:underline flex items-center"
-          >
-            <span v-if="selectedCategoryPath">{{ selectedCategoryPath }}</span>
-            <span v-else class="text-gray-400">（カテゴリを選択してください）</span>
-          </button>
-        </div>
-        </div>
-        <div class="mb-4">
         <label class="block text-sm font-medium text-gray-700">工程名称</label>
         <input v-model="form.Name" type="text" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" placeholder="プロセス名称" />
       </div>
@@ -28,6 +17,23 @@
         <label class="block text-sm font-medium text-gray-700">説明</label>
         <textarea v-model="form.Description" rows="3" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" placeholder="プロセスの説明"></textarea>
       </div>
+
+      <InputOutputDefinitionComponent
+        ref="inputOutputDefinitionRef"
+        :selected-process-id="form.Name"
+        :relation-process-id="form.ID"
+        :selected-process-name="form.Name ?? ''"
+        :selected-process-description="form.Description ?? ''"
+        :input-artifacts="inputArtifacts"
+        :output-artifacts="outputArtifacts"
+        :process-items="processItems"
+        :artifact-items="artifactItems"
+        :show-process-setting-button="false"
+        @update:selected-process-id="onSelectedProcessIdUpdated"
+        @update:input-artifacts="onUpdateInputArtifacts"
+        @update:output-artifacts="onUpdateOutputArtifacts"
+        @remove-artifact="onRemoveArtifact"
+      />
 
       <button 
         @click="onSubmit"
@@ -97,19 +103,24 @@ import { ref, computed, onMounted, watch, onUnmounted } from 'vue';
 import { useRoute } from 'vue-router';
 import RepositoryWorkerClient from '../lib/repositoryWorkerClient';
 import { useProcessStore } from '../stores/processStore';
-import { useCategoryStore, type CategoryNode } from '../stores/categoryStore';
+import { useCategoryStore } from '../stores/categoryStore';
 import { useProjectStore } from '../stores/projectStore';
 import { useMetadataStore } from '../stores/metadataStore';
+import { useArtifactStore } from '../stores/artifactStore';
+import { useCategorySelector } from '../composables/useCategorySelector';
 import type { ProcessType } from '../types/models';
 import CategorySelectorModal from '../components/common/CategorySelectorModal.vue';
+import CategorySelector from '../components/common/CategorySelector.vue';
 import ModalDialog from '../components/common/ModalDialog.vue'
 import ThreeWayCompareModal from '../components/common/ThreeWayCompareModal.vue'
 import ConflictFields from '../components/common/ConflictFields.vue'
+import InputOutputDefinitionComponent from '../components/trigger/InputOutputDefinitionComponent.vue'
 
 const processStore = useProcessStore();
 const categoryStore = useCategoryStore();
 const projectStore = useProjectStore();
 const metadataStore = useMetadataStore();
+const artifactStore = useArtifactStore();
 
 const processes = computed(() => processStore.processes);
 const categoryMap = computed(() => categoryStore.getMap);
@@ -117,15 +128,76 @@ const categoryMap = computed(() => categoryStore.getMap);
 const form = processStore.draft as any;
 
 const isEditing = computed(() => !!form.ID);
-const selectedCategoryPath = computed(() => {
-  return form.CategoryID ? categoryStore.getFullPath(form.CategoryID) : null;
+
+/**
+ * 処理名: 現在カテゴリID取得
+ * @returns 現在編集中のカテゴリID
+ */
+function getCurrentCategoryId(): string | null | undefined {
+  return form.CategoryID;
+}
+
+/**
+ * 処理名: カテゴリパス解決
+ * @param categoryId カテゴリID
+ * @returns カテゴリのフルパス
+ */
+function resolveCategoryPath(categoryId: string): string | null {
+  return categoryStore.getFullPath(categoryId);
+}
+
+/**
+ * 処理名: カテゴリID反映
+ * @param categoryId カテゴリID
+ */
+function applyCategoryId(categoryId: string): void {
+  processStore.setDraft({ CategoryID: categoryId });
+}
+
+const {
+  showCategorySelector,
+  selectedCategoryPath,
+  openCategorySelector,
+  onCategorySelected
+} = useCategorySelector({
+  categoryId: getCurrentCategoryId,
+  getFullPath: resolveCategoryPath,
+  applyCategoryId
 });
 const isValid = computed(() => form.Name && form.CategoryID);
 
-const showCategorySelector = ref(false);
 const showCompareModal = ref(false)
 const compareKey = ref<string | null>(null)
 const route = useRoute()
+
+type InputOutputDefinitionExposed = {
+  saveCausalRelations: Function;
+};
+const inputOutputDefinitionRef = ref<InputOutputDefinitionExposed | null>(null);
+
+type InputArtifactDraft = {
+  id: string;
+  name: string;
+};
+
+type OutputArtifactDraft = {
+  id: string;
+  name: string;
+  crud?: 'Create' | 'Update';
+};
+
+const inputArtifacts = ref<InputArtifactDraft[]>([]);
+const outputArtifacts = ref<OutputArtifactDraft[]>([]);
+const processItems = computed(() => processStore.processes.map(p => ({
+  id: p.ID,
+  name: p.Name,
+  description: p.Description
+})));
+const artifactItems = computed(() => artifactStore.artifacts.map(a => ({
+  id: a.ID,
+  name: a.Name,
+  description: a.Note
+})));
 
 const viewTabBadge = computed(() => {
   const proj = projectStore.selectedProject
@@ -172,6 +244,7 @@ function openCompare(key: string) {
 onMounted(() => {
   processStore.init();
   categoryStore.init();
+  artifactStore.init();
 });
 
 /**
@@ -186,22 +259,41 @@ function getCategoryName(id: string) {
 }
 
 /**
- * 処理名: カテゴリ選択モーダルを開く
  *
- * 処理概要: カテゴリ選択用モーダルを表示する
+ * @param processId
  */
-function openCategorySelector() {
-  showCategorySelector.value = true;
+function onSelectedProcessIdUpdated(processId: string) {
+  form.Name = processId;
 }
 
 /**
- * 処理名: カテゴリ選択ハンドラ
- * @param node 選択された `CategoryNode`
  *
- * 処理概要: フォームに選択カテゴリを設定する
+ * @param value
  */
-function onCategorySelected(node: CategoryNode) {
-  processStore.setDraft({ CategoryID: node.ID });
+function onUpdateInputArtifacts(value: InputArtifactDraft[]) {
+  inputArtifacts.value = value;
+}
+
+/**
+ *
+ * @param value
+ */
+function onUpdateOutputArtifacts(value: OutputArtifactDraft[]) {
+  outputArtifacts.value = value;
+}
+
+/**
+ *
+ * @param payload
+ * @param payload.index
+ * @param payload.mode
+ */
+function onRemoveArtifact(payload: { index: number; mode: 'input' | 'output' }) {
+  if (payload.mode === 'input') {
+    inputArtifacts.value = inputArtifacts.value.filter((_, idx) => idx !== payload.index);
+    return;
+  }
+  outputArtifacts.value = outputArtifacts.value.filter((_, idx) => idx !== payload.index);
 }
 
 /**
@@ -235,6 +327,8 @@ async function onDelete(proc: ProcessType) {
 async function onSubmit() {
   if(!isValid.value) return;
 
+  let savedProcessId = '';
+
   if (isEditing.value) {
     // Update
     const target = processStore.processes.find(p => p.ID === form.ID);
@@ -245,15 +339,25 @@ async function onSubmit() {
         Description: form.Description,
         CategoryID: form.CategoryID
       });
+      savedProcessId = target.ID;
     }
   } else {
     // Add
-    await processStore.add({
+    const added = await processStore.add({
       Name: form.Name,
       Description: form.Description,
       CategoryID: form.CategoryID
     });
+    savedProcessId = added?.processId ?? '';
   }
+
+  if (savedProcessId && inputOutputDefinitionRef.value) {
+    await inputOutputDefinitionRef.value.saveCausalRelations({
+      processTypeId: savedProcessId,
+      triggerId: ''
+    });
+  }
+
   resetForm();
 
   // Post-save: remove conflict and sync

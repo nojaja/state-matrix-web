@@ -46,8 +46,8 @@ export class VirtualFsRepository<T extends { ID: string }> {
                 const atText = await this.vfs.readFile(atPath);
                 const atObj = yaml.load(atText) as any;
                 if (atObj && atObj.ProcessTypeID) data.ProcessTypeID = atObj.ProcessTypeID;
-              } catch (e) {
-                // ignore mapping failures, return original data
+              } catch (error) {
+                console.warn(`ActionTriggerTypes mapping failed: ${data.ActionTriggerTypeID}`, error);
               }
             }
             return data as T;
@@ -83,8 +83,8 @@ export class VirtualFsRepository<T extends { ID: string }> {
           const atText = await this.vfs.readFile(atPath);
           const atObj = yaml.load(atText) as any;
           if (atObj && atObj.ProcessTypeID) data.ProcessTypeID = atObj.ProcessTypeID;
-        } catch (e) {
-          // ignore
+        } catch (error) {
+          console.warn(`ActionTriggerTypes mapping failed: ${data.ActionTriggerTypeID}`, error);
         }
       }
       return data as T;
