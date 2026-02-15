@@ -156,19 +156,27 @@ const props = withDefaults(defineProps<{
   relationProcessId: '',
   selectedProcessName: '',
   selectedProcessDescription: '',
+  /**
+   * 処理名: プロセス一覧既定値
+   * @returns 空の配列
+   */
   processItems: () => [],
+  /**
+   * 処理名: 作成物一覧既定値
+   * @returns 空の配列
+   */
   artifactItems: () => [],
   showProcessSettingButton: true,
   disabled: false
 });
 
 const emit = defineEmits<{
-  (e: 'request-open-process-selector'): void;
-  (e: 'request-open-artifact-selector', mode: 'input' | 'output'): void;
-  (e: 'update:selectedProcessId', value: string): void;
-  (e: 'update:inputArtifacts', value: InputArtifactDraft[]): void;
-  (e: 'update:outputArtifacts', value: OutputArtifactDraft[]): void;
-  (e: 'remove-artifact', payload: { index: number; mode: 'input' | 'output' }): void;
+  'request-open-process-selector': [];
+  'request-open-artifact-selector': ['input' | 'output'];
+  'update:selectedProcessId': [string];
+  'update:inputArtifacts': [InputArtifactDraft[]];
+  'update:outputArtifacts': [OutputArtifactDraft[]];
+  'remove-artifact': [{ index: number; mode: 'input' | 'output' }];
 }>();
 
 const showProcessSelector = ref(false);
@@ -176,21 +184,38 @@ const showArtifactSelector = ref(false);
 const artifactSelectorMode = ref<'input' | 'output'>('input');
 const causalRelationStore = useCausalRelationStore();
 
+/**
+ *
+ */
 function onRequestOpenProcessSelector() {
   showProcessSelector.value = true;
   emit('request-open-process-selector');
 }
 
+/**
+ *
+ * @param mode
+ */
 function onRequestOpenArtifactSelector(mode: 'input' | 'output') {
   artifactSelectorMode.value = mode;
   showArtifactSelector.value = true;
   emit('request-open-artifact-selector', mode);
 }
 
+/**
+ *
+ * @param index
+ * @param mode
+ */
 function onRemoveArtifact(index: number, mode: 'input' | 'output') {
   emit('remove-artifact', { index, mode });
 }
 
+/**
+ *
+ * @param index
+ * @param crud
+ */
 function onChangeOutputCrud(index: number, crud: 'Create' | 'Update') {
   const next = props.outputArtifacts.map((item, idx) => {
     if (idx !== index) {
@@ -204,10 +229,18 @@ function onChangeOutputCrud(index: number, crud: 'Create' | 'Update') {
   emit('update:outputArtifacts', next);
 }
 
+/**
+ *
+ * @param item
+ */
 function onProcessSelected(item: SelectorItem) {
   emit('update:selectedProcessId', item.id);
 }
 
+/**
+ *
+ * @param item
+ */
 function onArtifactSelected(item: SelectorItem) {
   if (artifactSelectorMode.value === 'input') {
     if (props.inputArtifacts.some(a => a.id === item.id)) {
@@ -223,6 +256,10 @@ function onArtifactSelected(item: SelectorItem) {
   emit('update:outputArtifacts', [...props.outputArtifacts, { id: item.id, name: item.name, crud: 'Create' }]);
 }
 
+/**
+ * 処理名: 選択中プロセスの因果関係同期
+ * @returns 同期処理の完了
+ */
 async function syncArtifactsByRelationsForSelectedProcess() {
   const selectedProcessId = props.selectedProcessId;
   const effectiveProcessId = props.relationProcessId || selectedProcessId;
@@ -242,6 +279,11 @@ async function syncArtifactsByRelationsForSelectedProcess() {
     (relation: any) => relation.ProcessTypeID === effectiveProcessId
   );
 
+  /**
+    * 処理名: 作成物名解決
+   * @param artifactId
+    * @returns 対応する作成物名
+   */
   const resolveArtifactName = (artifactId: string): string => {
     const found = props.artifactItems.find((item) => item.id === artifactId);
     return found?.name ?? '';
@@ -273,6 +315,12 @@ watch(
   }
 );
 
+/**
+ * 処理名: 因果関係保存
+ * @param params
+ * @param params.processTypeId
+ * @returns 保存処理の完了
+ */
 async function saveCausalRelations(params: { processTypeId: string }) {
   if (!params.processTypeId) {
     return;

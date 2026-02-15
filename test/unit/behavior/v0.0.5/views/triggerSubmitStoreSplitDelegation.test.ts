@@ -4,6 +4,10 @@ import { resolve } from 'node:path';
 
 const triggerViewPath = resolve(process.cwd(), 'src/views/TriggerView.vue');
 
+/**
+ * 処理名: TriggerViewソース読込
+ * @returns TriggerViewのソース文字列
+ */
 async function readSource(): Promise<string> {
   return readFile(triggerViewPath, 'utf-8');
 }

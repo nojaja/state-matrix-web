@@ -138,8 +138,21 @@ const {
   openCategorySelector,
   onCategorySelected
 } = useCategorySelector({
+  /**
+  * 処理名: 現在カテゴリID取得
+  * @returns 現在のカテゴリID
+   */
   categoryId: () => form.CategoryID,
+  /**
+  * 処理名: カテゴリフルパス取得
+   * @param categoryId
+  * @returns カテゴリのフルパス
+   */
   getFullPath: (categoryId: string) => categoryStore.getFullPath(categoryId),
+  /**
+   *
+   * @param categoryId
+   */
   applyCategoryId: (categoryId: string) => {
     triggerStore.setDraft({ CategoryID: categoryId });
   }
@@ -155,7 +168,7 @@ const showCompareModal = ref(false)
 const compareKey = ref<string | null>(null)
 const route = useRoute()
 type InputOutputDefinitionExposed = {
-  saveCausalRelations: (params: { processTypeId: string }) => Promise<void>;
+  saveCausalRelations: Function;
 };
 const inputOutputDefinitionRef = ref<InputOutputDefinitionExposed | null>(null);
 

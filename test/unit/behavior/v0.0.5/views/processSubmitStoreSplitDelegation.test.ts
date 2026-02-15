@@ -4,6 +4,10 @@ import { resolve } from 'node:path';
 
 const processViewPath = resolve(process.cwd(), 'src/views/ProcessView.vue');
 
+/**
+ * 処理名: ProcessViewソース読込
+ * @returns ProcessViewのソース文字列
+ */
 async function readSource(): Promise<string> {
   return readFile(processViewPath, 'utf-8');
 }

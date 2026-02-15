@@ -4,6 +4,10 @@ import { resolve } from 'node:path';
 
 const componentPath = resolve(process.cwd(), 'src/components/trigger/InputOutputDefinitionComponent.vue');
 
+/**
+ * 処理名: コンポーネントソース読込
+ * @returns コンポーネントのソース文字列
+ */
 async function readSource(): Promise<string> {
   return readFile(componentPath, 'utf-8');
 }

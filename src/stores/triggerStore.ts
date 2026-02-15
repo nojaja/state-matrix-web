@@ -111,6 +111,7 @@ export const useTriggerStore = defineStore('data-mgmt-system/trigger', {
      * 処理概要: トリガー本体を作成して永続化する
      *
      * 実装理由: ActionTriggerType の保存責務を分離するため
+    * @returns 保存したトリガーIDと対象プロセスID
      */
     async addTrigger(
       triggerPartial: Omit<ActionTriggerType, 'ID' | 'CreateTimestamp' | 'LastUpdatedBy'>

@@ -171,7 +171,7 @@ const compareKey = ref<string | null>(null)
 const route = useRoute()
 
 type InputOutputDefinitionExposed = {
-  saveCausalRelations: (params: { processTypeId: string; triggerId?: string }) => Promise<void>;
+  saveCausalRelations: Function;
 };
 const inputOutputDefinitionRef = ref<InputOutputDefinitionExposed | null>(null);
 
@@ -258,18 +258,36 @@ function getCategoryName(id: string) {
   return categoryMap.value[id]?.Name || id;
 }
 
+/**
+ *
+ * @param processId
+ */
 function onSelectedProcessIdUpdated(processId: string) {
   form.Name = processId;
 }
 
+/**
+ *
+ * @param value
+ */
 function onUpdateInputArtifacts(value: InputArtifactDraft[]) {
   inputArtifacts.value = value;
 }
 
+/**
+ *
+ * @param value
+ */
 function onUpdateOutputArtifacts(value: OutputArtifactDraft[]) {
   outputArtifacts.value = value;
 }
 
+/**
+ *
+ * @param payload
+ * @param payload.index
+ * @param payload.mode
+ */
 function onRemoveArtifact(payload: { index: number; mode: 'input' | 'output' }) {
   if (payload.mode === 'input') {
     inputArtifacts.value = inputArtifacts.value.filter((_, idx) => idx !== payload.index);

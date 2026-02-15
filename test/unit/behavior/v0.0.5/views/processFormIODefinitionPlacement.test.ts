@@ -4,10 +4,19 @@ import { resolve } from 'node:path';
 
 const processViewPath = resolve(process.cwd(), 'src/views/ProcessView.vue');
 
+/**
+ * 処理名: ProcessViewソース読込
+ * @returns ProcessViewのソース文字列
+ */
 async function readProcessViewSource(): Promise<string> {
   return readFile(processViewPath, 'utf-8');
 }
 
+/**
+ * 処理名: template抽出
+ * @param source
+ * @returns templateブロック
+ */
 function extractTemplate(source: string): string {
   const match = source.match(/<template>([\s\S]*?)<\/template>/);
   if (!match) {
