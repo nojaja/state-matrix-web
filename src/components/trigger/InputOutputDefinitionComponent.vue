@@ -123,7 +123,6 @@
 import { ref, watch } from 'vue';
 import SimpleSelectorModal from '../common/SimpleSelectorModal.vue';
 import { useCausalRelationStore } from '../../stores/causalRelationStore';
-import { useTriggerStore } from '../../stores/triggerStore';
 
 type SelectorItem = {
   id: string;
@@ -176,7 +175,6 @@ const showProcessSelector = ref(false);
 const showArtifactSelector = ref(false);
 const artifactSelectorMode = ref<'input' | 'output'>('input');
 const causalRelationStore = useCausalRelationStore();
-const triggerStore = useTriggerStore();
 
 function onRequestOpenProcessSelector() {
   showProcessSelector.value = true;
@@ -228,18 +226,10 @@ function onArtifactSelected(item: SelectorItem) {
 async function syncArtifactsByRelationsForSelectedProcess() {
   const selectedProcessId = props.selectedProcessId;
   const effectiveProcessId = props.relationProcessId || selectedProcessId;
-  const triggerId = triggerStore.draft?.ID as string | undefined;
   if (!effectiveProcessId) {
     emit('update:inputArtifacts', []);
     emit('update:outputArtifacts', []);
     return;
-  }
-
-  if (!causalRelationStore._actionTriggerRepository && triggerStore._actionTriggerRepository) {
-    causalRelationStore._actionTriggerRepository = triggerStore._actionTriggerRepository;
-  }
-  if (!causalRelationStore._causalRelationRepository && triggerStore._causalRelationRepository) {
-    causalRelationStore._causalRelationRepository = triggerStore._causalRelationRepository;
   }
 
   if (!causalRelationStore.initialized) {
@@ -248,15 +238,9 @@ async function syncArtifactsByRelationsForSelectedProcess() {
     await causalRelationStore.fetchAll();
   }
 
-  let relations = (causalRelationStore.relations ?? []).filter(
+  const relations = (causalRelationStore.relations ?? []).filter(
     (relation: any) => relation.ProcessTypeID === effectiveProcessId
   );
-
-  if (relations.length === 0 && triggerId && typeof causalRelationStore.getRelationsByTriggerId === 'function') {
-    relations = causalRelationStore
-      .getRelationsByTriggerId(triggerId)
-      .filter((relation: any) => relation.ProcessTypeID === effectiveProcessId);
-  }
 
   const resolveArtifactName = (artifactId: string): string => {
     const found = props.artifactItems.find((item) => item.id === artifactId);
@@ -283,19 +267,15 @@ async function syncArtifactsByRelationsForSelectedProcess() {
 }
 
 watch(
-  () => [props.selectedProcessId, props.relationProcessId, triggerStore.draft?.ID],
+  () => [props.selectedProcessId, props.relationProcessId],
   async () => {
     await syncArtifactsByRelationsForSelectedProcess();
   }
 );
 
-async function saveCausalRelations(params: { processTypeId: string; triggerId?: string }) {
+async function saveCausalRelations(params: { processTypeId: string }) {
   if (!params.processTypeId) {
     return;
-  }
-
-  if (!causalRelationStore._causalRelationRepository && triggerStore._causalRelationRepository) {
-    causalRelationStore._causalRelationRepository = triggerStore._causalRelationRepository;
   }
 
   const inputRelations = props.inputArtifacts.map((artifact) => ({

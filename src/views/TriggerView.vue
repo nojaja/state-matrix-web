@@ -146,7 +146,7 @@ const showCompareModal = ref(false)
 const compareKey = ref<string | null>(null)
 const route = useRoute()
 type InputOutputDefinitionExposed = {
-  saveCausalRelations: (params: { processTypeId: string; triggerId: string }) => Promise<void>;
+  saveCausalRelations: (params: { processTypeId: string }) => Promise<void>;
 };
 const inputOutputDefinitionRef = ref<InputOutputDefinitionExposed | null>(null);
 
@@ -322,8 +322,7 @@ async function onSubmit() {
 
     if (saved?.processTypeId && inputOutputDefinitionRef.value) {
       await inputOutputDefinitionRef.value.saveCausalRelations({
-        processTypeId: saved.processTypeId,
-        triggerId: saved.triggerId
+        processTypeId: saved.processTypeId
       });
     }
     
