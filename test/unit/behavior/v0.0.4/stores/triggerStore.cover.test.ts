@@ -34,7 +34,6 @@ it('trigger store basic flows', async () => {
 
   // mock getAll
   jest.spyOn(store._actionTriggerRepository, 'getAll').mockResolvedValue([]);
-  jest.spyOn(store._causalRelationRepository, 'getAll').mockResolvedValue([]);
 
   await store.fetchAll();
   expect(store.loading).toBe(false);
@@ -43,30 +42,21 @@ it('trigger store basic flows', async () => {
   store.setDraft({ Name: 'T1', CategoryID: 'c1' });
   expect(store.draft.Name).toBe('T1');
 
-  // loadDraft
-  const trigger = { ID: 't1', Name: 'T1', Description: '', CategoryID: 'c1', ProcessTypeID: '', Rollgroup: '', Timing: '', TimingDetail: '', ActionType: 0 };
-  const relations = [ { ID: 'r1', ProcessTypeID: 't1', CrudType: 'Input', ArtifactTypeID: 'a1' }, { ID: 'r2', ProcessTypeID: 't1', CrudType: 'Output', ArtifactTypeID: 'a2' } ];
-  store.loadDraft(trigger as any, relations as any);
-  expect(store.draft.inputArtifacts.length).toBe(1);
-  expect(store.draft.outputArtifacts.length).toBe(1);
-
   // resetDraft
+  store.draft.inputArtifacts.push({ id: 'a1', name: 'A1' });
+  store.draft.outputArtifacts.push({ id: 'a2', name: 'A2', crud: 'Create' });
   store.resetDraft();
   expect(store.draft.Name).toBe('');
+  expect(store.draft.inputArtifacts.length).toBe(0);
+  expect(store.draft.outputArtifacts.length).toBe(0);
 
-  // addTrigger: spy save and relation save
+  // addTrigger: spy save
   const spySaveTrigger = jest.spyOn(store._actionTriggerRepository, 'save').mockResolvedValue(undefined);
-  jest.spyOn(store._causalRelationRepository, 'save').mockResolvedValue(undefined);
   // ensure fetchAll called after addTrigger
   const spyFetchAll = jest.spyOn(store, 'fetchAll');
-  await store.addTrigger({ Name: 'New' } as any, [] as any);
+  await store.addTrigger({ Name: 'New' } as any);
   expect(spySaveTrigger).toHaveBeenCalled();
   expect(spyFetchAll).toHaveBeenCalled();
-
-  // updateTrigger: spy delete/save
-  const spyDelete = jest.spyOn(store._causalRelationRepository, 'delete').mockResolvedValue(undefined);
-  await store.updateTrigger(trigger as any, relations as any, ['rX']);
-  expect(spyDelete).toHaveBeenCalled();
 
   // removeTrigger
   const spyDeleteTrigger = jest.spyOn(store._actionTriggerRepository, 'delete').mockResolvedValue(undefined);
