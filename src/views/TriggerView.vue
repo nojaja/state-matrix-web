@@ -3,98 +3,71 @@
     <!-- Form Section -->
     <div class="bg-white p-6 rounded shadow">
       <h2 class="text-lg font-bold mb-4">トリガー管理
-        <span v-if="viewTabBadge > 0" class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-600 text-white" :aria-label="`トリガータブの競合 ${viewTabBadge} 件`" tabindex="0" @click.prevent="openFirstScopeConflict" @keydown.enter.prevent="openFirstScopeConflict" @keydown.space.prevent="openFirstScopeConflict">{{ viewTabBadge }}</span>
+        <span v-if="viewTabBadge > 0"
+          class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-600 text-white"
+          :aria-label="`トリガータブの競合 ${viewTabBadge} 件`" tabindex="0" @click.prevent="openFirstScopeConflict"
+          @keydown.enter.prevent="openFirstScopeConflict" @keydown.space.prevent="openFirstScopeConflict">{{
+          viewTabBadge }}</span>
       </h2>
-      
-        <CategorySelector :path="selectedCategoryPath" @open="openCategorySelector" />
+
+      <CategorySelector :path="selectedCategoryPath" @open="openCategorySelector" />
 
       <div class="mb-4">
         <label class="block text-sm font-medium text-gray-700">名称</label>
-        <input v-model="form.Name" type="text" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" placeholder="作成物名称" />
+        <input v-model="form.Name" type="text" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+          placeholder="作成物名称" />
       </div>
 
       <div class="mb-4">
-         <label class="block text-sm font-medium text-gray-700">説明</label>
-         <textarea v-model="form.Description" rows="2" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" placeholder="説明"></textarea>
+        <label class="block text-sm font-medium text-gray-700">説明</label>
+        <textarea v-model="form.Description" rows="2"
+          class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" placeholder="説明"></textarea>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-           <label class="block text-sm font-medium text-gray-700">トリガー条件</label>
-           <input v-model="form.Timing" type="text" class="mt-1 block w-full border rounded p-1" placeholder="例: ファイル着信時" />
+          <label class="block text-sm font-medium text-gray-700">トリガー条件</label>
+          <input v-model="form.Timing" type="text" class="mt-1 block w-full border rounded p-1"
+            placeholder="例: ファイル着信時" />
         </div>
         <div>
-            <label class="block text-sm font-medium text-gray-700">担当ロール</label>
-            <input v-model="form.Rollgroup" type="text" class="mt-1 block w-full border rounded p-1" placeholder="担当者1" />
+          <label class="block text-sm font-medium text-gray-700">担当ロール</label>
+          <input v-model="form.Rollgroup" type="text" class="mt-1 block w-full border rounded p-1" placeholder="担当者1" />
         </div>
       </div>
 
-      <InputOutputDefinitionComponent
-        ref="inputOutputDefinitionRef"
-        :selected-process-id="form.ProcessTypeID"
+      <InputOutputDefinitionComponent ref="inputOutputDefinitionRef" :selected-process-id="form.ProcessTypeID"
         :selected-process-name="selectedProcess?.Name ?? ''"
-        :selected-process-description="selectedProcess?.Description ?? ''"
-        :input-artifacts="inputArtifacts"
-        :output-artifacts="outputArtifacts"
-        :process-items="processItems"
-        :artifact-items="artifactItems"
-        :show-process-setting-button="true"
-        @update:selected-process-id="onSelectedProcessIdUpdated"
-        @remove-artifact="onRemoveArtifactFromComponent"
-        @update:input-artifacts="onUpdateInputArtifacts"
-        @update:output-artifacts="onUpdateOutputArtifacts"
-      />
+        :selected-process-description="selectedProcess?.Description ?? ''" :input-artifacts="inputArtifacts"
+        :output-artifacts="outputArtifacts" :process-items="processItems" :artifact-items="artifactItems"
+        :show-process-setting-button="true" @update:selected-process-id="onSelectedProcessIdUpdated"
+        @remove-artifact="onRemoveArtifactFromComponent" @update:input-artifacts="onUpdateInputArtifacts"
+        @update:output-artifacts="onUpdateOutputArtifacts" />
 
-      <button 
-        @click="onSubmit"
+      <button @click="onSubmit"
         class="w-full bg-purple-600 text-white py-3 rounded hover:bg-purple-700 font-bold disabled:opacity-50"
-        :disabled="!isValid"
-      >
+        :disabled="!isValid">
         {{ isEditing ? 'トリガーを更新' : 'トリガーを追加' }}
       </button>
-       <button 
-        v-if="isEditing" 
-        @click="resetForm"
-        class="w-full mt-2 bg-gray-300 text-gray-700 py-1 rounded hover:bg-gray-400"
-      >
+      <button v-if="isEditing" @click="resetForm"
+        class="w-full mt-2 bg-gray-300 text-gray-700 py-1 rounded hover:bg-gray-400">
         キャンセル
       </button>
     </div>
 
     <!-- List -->
-    <div class="bg-white p-6 rounded shadow overflow-x-auto">
-        <h3 class="text-lg font-bold mb-4">登録済トリガー一覧</h3>
-        <table class="min-w-full divide-y divide-gray-200">
-        <thead class="bg-gray-50">
-          <tr>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">トリガー名</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">カテゴリ</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">関連プロセス</th>
-             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">条件</th>
-            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
-          </tr>
-        </thead>
-        <tbody class="bg-white divide-y divide-gray-200">
-          <tr v-for="t in triggers" :key="t.ID">
-             <td class="px-6 py-4 whitespace-nowrap">{{ t.Name }} <span v-if="metadataStore.conflictData?.[projectStore.selectedProject || '']?.[t.ID]" class="ml-2 text-red-600">●</span></td>
-             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ getCategoryName(t.CategoryID) }}</td>
-             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ getProcessName(t.ProcessTypeID) }}</td>
-             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ t.Timing }}</td>
-             <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-               <button @click="onEdit(t)" class="text-indigo-600 hover:text-indigo-900 mr-2 bg-indigo-100 px-3 py-1 rounded-full">編集</button>
-               <button v-if="metadataStore.conflictData?.[projectStore.selectedProject || '']?.[t.ID]" @click="openCompare(t.ID)" class="text-yellow-700 mr-2 bg-yellow-100 px-3 py-1 rounded-full">競合解消</button>
-               <button @click="onDelete(t)" class="text-red-600 hover:text-red-900 bg-red-100 px-3 py-1 rounded-full">削除</button>
-             </td>
-          </tr>
-          <tr v-if="triggers.length === 0">
-              <td colspan="5" class="px-6 py-4 text-center text-gray-400">データがありません</td>
-          </tr>
-        </tbody>
-        </table>
-    </div>
+    <EntityListSection title="登録済トリガー一覧" :columns="triggerListColumns" :rows="triggerListRows"
+      container-class="bg-white p-6 rounded shadow overflow-x-auto" :show-conflict-dot="hasTriggerConflict"
+      :show-resolve-button="hasTriggerConflict" @edit="onEditById" @resolve-conflict="openCompare"
+      @delete="onDeleteById">
+      <template #cell-name="{ row }">{{ row.name }}</template>
+      <template #cell-category="{ row }">{{ row.category }}</template>
+      <template #cell-relatedProcess="{ row }">{{ row.relatedProcess }}</template>
+      <template #cell-condition="{ row }">{{ row.condition }}</template>
+    </EntityListSection>
 
     <!-- Modals -->
-     <CategorySelectorModal v-model="showCategorySelector" @confirm="onCategorySelected" />
+    <CategorySelectorModal v-model="showCategorySelector" @confirm="onCategorySelected" />
     <ModalDialog v-model="showCompareModal" title="競合解消">
       <ThreeWayCompareModal :keyId="compareKey || ''" />
     </ModalDialog>
@@ -115,6 +88,7 @@ import { useCategorySelector } from '../composables/useCategorySelector';
 import type { ActionTriggerType } from '../types/models';
 import CategorySelectorModal from '../components/common/CategorySelectorModal.vue';
 import CategorySelector from '../components/common/CategorySelector.vue';
+import EntityListSection from '../components/common/EntityListSection.vue';
 import ModalDialog from '../components/common/ModalDialog.vue'
 import ThreeWayCompareModal from '../components/common/ThreeWayCompareModal.vue'
 import InputOutputDefinitionComponent from '../components/trigger/InputOutputDefinitionComponent.vue'
@@ -127,6 +101,19 @@ const processStore = useProcessStore();
 const artifactStore = useArtifactStore();
 
 const triggers = computed(() => triggerStore.triggers);
+const triggerListColumns = [
+  { key: 'name', label: 'トリガー名', cellClass: 'px-6 py-4 whitespace-nowrap' },
+  { key: 'category', label: 'カテゴリ', cellClass: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500' },
+  { key: 'relatedProcess', label: '関連プロセス', cellClass: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500' },
+  { key: 'condition', label: '条件', cellClass: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500' }
+];
+const triggerListRows = computed(() => triggers.value.map(t => ({
+  ID: t.ID,
+  name: t.Name,
+  category: getCategoryName(t.CategoryID),
+  relatedProcess: getProcessName(t.ProcessTypeID),
+  condition: t.Timing
+})));
 
 const form = triggerStore.draft as any;
 
@@ -157,8 +144,8 @@ const {
     triggerStore.setDraft({ CategoryID: categoryId });
   }
 });
-const inputArtifacts = triggerStore.draft.inputArtifacts as {id: string, name: string}[];
-const outputArtifacts = triggerStore.draft.outputArtifacts as {id: string, name: string, crud?: 'Create' | 'Update'}[];
+const inputArtifacts = triggerStore.draft.inputArtifacts as { id: string, name: string }[];
+const outputArtifacts = triggerStore.draft.outputArtifacts as { id: string, name: string, crud?: 'Create' | 'Update' }[];
 const selectedProcess = computed(() => processStore.processes.find(p => p.ID === form.ProcessTypeID));
 
 const isValid = computed(() => form.Name && form.CategoryID && form.ProcessTypeID);
@@ -176,7 +163,7 @@ const viewTabBadge = computed(() => {
   const proj = projectStore.selectedProject
   if (!proj) return 0
   const map = metadataStore.conflictData[proj] || {}
-  return Object.values(map).filter((c:any) => c && c.path && c.path.startsWith('ActionTriggerTypes/')).length
+  return Object.values(map).filter((c: any) => c && c.path && c.path.startsWith('ActionTriggerTypes/')).length
 })
 
 /**
@@ -214,23 +201,52 @@ function openCompare(key: string) {
   showCompareModal.value = true
 }
 
+/**
+ * 処理名: トリガー競合判定
+ * @param id トリガーID
+ * @returns 競合がある場合 true
+ */
+function hasTriggerConflict(id: string): boolean {
+  return !!metadataStore.conflictData?.[projectStore.selectedProject || '']?.[id];
+}
+
+/**
+ * 処理名: ID指定編集
+ * @param id トリガーID
+ */
+function onEditById(id: string) {
+  const trigger = triggers.value.find(triggerItem => triggerItem.ID === id);
+  if (!trigger) return;
+  onEdit(trigger);
+}
+
+/**
+ * 処理名: ID指定削除
+ * @param id トリガーID
+ */
+async function onDeleteById(id: string) {
+  const trigger = triggers.value.find(triggerItem => triggerItem.ID === id);
+  if (!trigger) return;
+  await onDelete(trigger);
+}
+
 const processItems = computed(() => processStore.processes.map(p => ({
-    id: p.ID,
-    name: p.Name,
-    description: p.Description
+  id: p.ID,
+  name: p.Name,
+  description: p.Description
 })));
 
 const artifactItems = computed(() => artifactStore.artifacts.map(a => ({
-    id: a.ID,
-    name: a.Name,
-    description: a.Note
+  id: a.ID,
+  name: a.Name,
+  description: a.Note
 })));
 
 onMounted(() => {
-   triggerStore.init();
-   categoryStore.init();
-   processStore.init();
-   artifactStore.init();
+  triggerStore.init();
+  categoryStore.init();
+  processStore.init();
+  artifactStore.init();
 });
 
 /**
@@ -263,7 +279,7 @@ function onSelectedProcessIdUpdated(processId: string) {
  * @param mode 'input' または 'output'
  */
 function removeArtifact(idx: number, mode: 'input' | 'output') {
-  if(mode === 'input') inputArtifacts.splice(idx, 1);
+  if (mode === 'input') inputArtifacts.splice(idx, 1);
   else outputArtifacts.splice(idx, 1);
 }
 
@@ -301,46 +317,46 @@ function onUpdateOutputArtifacts(value: { id: string; name: string; crud?: 'Crea
  * 処理概要: トリガーと関連を構築して永続化する
  */
 async function onSubmit() {
-    if(!isValid.value) return;
-    let saved: { triggerId: string; processTypeId: string } | null = null;
+  if (!isValid.value) return;
+  let saved: { triggerId: string; processTypeId: string } | null = null;
 
-    if(isEditing.value) {
-        // Edit mode logic: Remove and Re-Add for simplicity in this prototype
-        await triggerStore.removeTrigger(form.ID);
-        saved = await triggerStore.addTrigger({
-            Name: form.Name,
-            Description: form.Description,
-            CategoryID: form.CategoryID,
-            ProcessTypeID: form.ProcessTypeID,
-            Rollgroup: form.Rollgroup,
-            Timing: form.Timing,
-            TimingDetail: form.TimingDetail,
-            ActionType: form.ActionType
-        });
-        
-    } else {
-        saved = await triggerStore.addTrigger({
-            Name: form.Name,
-            Description: form.Description,
-            CategoryID: form.CategoryID,
-            ProcessTypeID: form.ProcessTypeID,
-            Rollgroup: form.Rollgroup,
-            Timing: form.Timing,
-            TimingDetail: form.TimingDetail,
-            ActionType: 0
-        });
-    }
+  if (isEditing.value) {
+    // Edit mode logic: Remove and Re-Add for simplicity in this prototype
+    await triggerStore.removeTrigger(form.ID);
+    saved = await triggerStore.addTrigger({
+      Name: form.Name,
+      Description: form.Description,
+      CategoryID: form.CategoryID,
+      ProcessTypeID: form.ProcessTypeID,
+      Rollgroup: form.Rollgroup,
+      Timing: form.Timing,
+      TimingDetail: form.TimingDetail,
+      ActionType: form.ActionType
+    });
 
-    if (saved?.processTypeId && inputOutputDefinitionRef.value) {
-      await inputOutputDefinitionRef.value.saveCausalRelations({
-        processTypeId: saved.processTypeId
-      });
-    }
-    
-    resetForm();
+  } else {
+    saved = await triggerStore.addTrigger({
+      Name: form.Name,
+      Description: form.Description,
+      CategoryID: form.CategoryID,
+      ProcessTypeID: form.ProcessTypeID,
+      Rollgroup: form.Rollgroup,
+      Timing: form.Timing,
+      TimingDetail: form.TimingDetail,
+      ActionType: 0
+    });
+  }
 
-    // Post-save: attempt push then remove/sync
-    await handlePostSave(projectStore.selectedProject, isEditing.value ? form.ID : null, 'TriggerView')
+  if (saved?.processTypeId && inputOutputDefinitionRef.value) {
+    await inputOutputDefinitionRef.value.saveCausalRelations({
+      processTypeId: saved.processTypeId
+    });
+  }
+
+  resetForm();
+
+  // Post-save: attempt push then remove/sync
+  await handlePostSave(projectStore.selectedProject, isEditing.value ? form.ID : null, 'TriggerView')
 }
 
 /**
@@ -448,15 +464,15 @@ async function syncProjectAndLog(project: string) {
  * @param t 編集対象の `ActionTriggerType`
  */
 function onEdit(t: ActionTriggerType) {
-    form.ID = t.ID;
-    form.Name = t.Name;
-    form.Description = t.Description;
-    form.CategoryID = t.CategoryID;
-    form.ProcessTypeID = t.ProcessTypeID;
-    form.Rollgroup = t.Rollgroup;
-    form.Timing = t.Timing;
-    form.TimingDetail = t.TimingDetail;
-    form.ActionType = t.ActionType;
+  form.ID = t.ID;
+  form.Name = t.Name;
+  form.Description = t.Description;
+  form.CategoryID = t.CategoryID;
+  form.ProcessTypeID = t.ProcessTypeID;
+  form.Rollgroup = t.Rollgroup;
+  form.Timing = t.Timing;
+  form.TimingDetail = t.TimingDetail;
+  form.ActionType = t.ActionType;
 }
 
 /**
@@ -464,10 +480,10 @@ function onEdit(t: ActionTriggerType) {
  * @param t 削除対象の `ActionTriggerType`
  */
 async function onDelete(t: ActionTriggerType) {
-    if(confirm('削除しますか？')) {
-        await triggerStore.removeTrigger(t.ID);
-        if(form.ID === t.ID) resetForm();
-    }
+  if (confirm('削除しますか？')) {
+    await triggerStore.removeTrigger(t.ID);
+    if (form.ID === t.ID) resetForm();
+  }
 }
 
 /**
@@ -476,7 +492,7 @@ async function onDelete(t: ActionTriggerType) {
  * 処理概要: フォームと一時編集状態を初期化する
  */
 function resetForm() {
-    triggerStore.resetDraft();
+  triggerStore.resetDraft();
 }
 
 // 競合解決ハンドラは未使用のため削除
