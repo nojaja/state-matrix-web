@@ -6,9 +6,12 @@
         <EntityListSection title="登録済プロセス一覧" :columns="processListColumns" :rows="processListRows"
           :current-category-id="currentListCategoryId" :child-categories="listChildCategories"
           :breadcrumbs="listBreadcrumbs" :can-move-parent="canMoveParent"
+          :create-entity-label="'新規プロセス追加'"
           :show-conflict-dot="hasProcessConflict" :show-resolve-button="hasProcessConflict" @edit="onEditById"
           @resolve-conflict="openCompare" @delete="onDeleteById" @enter-category="enterCategory"
-          @move-to-parent="moveToParentCategory" @navigate-breadcrumb="navigateBreadcrumb">
+          @move-to-parent="moveToParentCategory" @navigate-breadcrumb="navigateBreadcrumb"
+          @create-category="onCreateCategory" @create-entity="onCreateEntity" @rename-category="onRenameCategory"
+          @delete-category="onDeleteCategory">
           <template #cell-name="{ row }">{{ row.name }}</template>
         </EntityListSection>
       </div>
@@ -66,6 +69,22 @@
     </div>
 
     <CategorySelectorModal v-model="showCategorySelector" @confirm="onCategorySelected" />
+    <ModalDialog v-model="showCategoryEditModal" :title="categoryModalMode === 'create' ? 'カテゴリ作成' : 'カテゴリ編集'">
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700">名称</label>
+          <input v-model="categoryEditingName" type="text"
+            class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border"
+            placeholder="カテゴリ名" @keydown.enter.prevent="confirmCategorySave"
+            @keydown.esc.prevent="showCategoryEditModal = false" />
+        </div>
+      </div>
+      <template #footer>
+        <button @click="showCategoryEditModal = false"
+          class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">キャンセル</button>
+        <button @click="confirmCategorySave" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">保存</button>
+      </template>
+    </ModalDialog>
     <ModalDialog v-model="showCompareModal" title="競合解消">
       <ThreeWayCompareModal :keyId="compareKey || ''" />
     </ModalDialog>
@@ -82,6 +101,7 @@ import { useCategoryStore } from '../stores/categoryStore';
 import { useProjectStore } from '../stores/projectStore';
 import { useMetadataStore } from '../stores/metadataStore';
 import { useArtifactStore } from '../stores/artifactStore';
+import { useEntityListNavigationStore } from '../stores/entityListNavigationStore';
 import { useCategorySelector } from '../composables/useCategorySelector';
 import type { ProcessType } from '../types/models';
 import CategorySelectorModal from '../components/common/CategorySelectorModal.vue';
@@ -97,10 +117,11 @@ const categoryStore = useCategoryStore();
 const projectStore = useProjectStore();
 const metadataStore = useMetadataStore();
 const artifactStore = useArtifactStore();
+const entityListNavigationStore = useEntityListNavigationStore();
 
 const processes = computed(() => processStore.processes);
 const categoryMap = computed(() => categoryStore.getMap);
-const currentListCategoryId = ref<string | null>(null);
+const currentListCategoryId = computed(() => entityListNavigationStore.currentCategoryId);
 const processListColumns = [
   { key: 'name', label: '工程名', cellClass: 'px-6 py-4 whitespace-nowrap' }
 ];
@@ -189,6 +210,11 @@ const isValid = computed(() => form.Name && form.CategoryID);
 const showCompareModal = ref(false)
 const compareKey = ref<string | null>(null)
 const route = useRoute()
+const showCategoryEditModal = ref(false)
+const categoryModalMode = ref<'create' | 'edit'>('create')
+const categoryEditingName = ref('')
+const categoryEditingId = ref<string | null>(null)
+const categoryTargetParentId = ref<string | null>(null)
 
 type InputOutputDefinitionExposed = {
   saveCausalRelations: Function;
@@ -275,15 +301,14 @@ function hasProcessConflict(id: string): boolean {
  * @param categoryId 移動先カテゴリID
  */
 function enterCategory(categoryId: string) {
-  currentListCategoryId.value = categoryId;
+  entityListNavigationStore.setCurrentCategory(categoryId);
 }
 
 /**
  * 処理名: 親カテゴリへ移動
  */
 function moveToParentCategory() {
-  if (!currentListCategoryId.value) return;
-  currentListCategoryId.value = categoryMap.value[currentListCategoryId.value]?.ParentID ?? null;
+  entityListNavigationStore.moveToParent(categoryStore.categories.map(c => ({ ID: c.ID, ParentID: c.ParentID })));
 }
 
 /**
@@ -291,7 +316,87 @@ function moveToParentCategory() {
  * @param categoryId パンくずのカテゴリID
  */
 function navigateBreadcrumb(categoryId: string | null) {
-  currentListCategoryId.value = categoryId;
+  entityListNavigationStore.setCurrentCategory(categoryId);
+}
+
+/**
+ * 処理名: カテゴリ作成開始
+ * @param parentCategoryId 親カテゴリID
+ */
+function onCreateCategory(parentCategoryId: string | null) {
+  categoryModalMode.value = 'create';
+  categoryEditingName.value = '';
+  categoryEditingId.value = null;
+  categoryTargetParentId.value = parentCategoryId;
+  showCategoryEditModal.value = true;
+}
+
+/**
+ * 処理名: エンティティ作成開始
+ * @param categoryId 現在カテゴリID
+ */
+function onCreateEntity(categoryId: string | null) {
+  resetForm();
+  if (categoryId) {
+    processStore.setDraft({ CategoryID: categoryId });
+  }
+}
+
+/**
+ * 処理名: カテゴリ名称変更開始
+ * @param categoryId カテゴリID
+ */
+function onRenameCategory(categoryId: string) {
+  const category = categoryStore.categories.find(c => c.ID === categoryId);
+  if (!category) return;
+  categoryModalMode.value = 'edit';
+  categoryEditingId.value = category.ID;
+  categoryEditingName.value = category.Name;
+  categoryTargetParentId.value = category.ParentID ?? null;
+  showCategoryEditModal.value = true;
+}
+
+/**
+ * 処理名: カテゴリ削除
+ * @param categoryId カテゴリID
+ */
+async function onDeleteCategory(categoryId: string) {
+  const category = categoryStore.categories.find(c => c.ID === categoryId);
+  if (!category) return;
+  if (confirm(`カテゴリ「${category.Name}」を削除しますか？\n（子要素がある場合は削除できません）`)) {
+    const hasChildren = categoryStore.categories.some(c => c.ParentID === categoryId);
+    if (hasChildren) {
+      alert('子カテゴリが存在するため削除できません。');
+      return;
+    }
+    await categoryStore.remove(categoryId);
+    if (currentListCategoryId.value === categoryId) {
+      entityListNavigationStore.setCurrentCategory(category.ParentID ?? null);
+    }
+  }
+}
+
+/**
+ * 処理名: カテゴリ保存確定
+ */
+async function confirmCategorySave() {
+  if (!categoryEditingName.value) return;
+
+  if (categoryModalMode.value === 'create') {
+    await categoryStore.add({
+      Name: categoryEditingName.value,
+      ParentID: categoryTargetParentId.value,
+      Level: 0,
+      Path: ''
+    });
+  } else if (categoryModalMode.value === 'edit' && categoryEditingId.value) {
+    const category = categoryStore.categories.find(c => c.ID === categoryEditingId.value);
+    if (category) {
+      await categoryStore.update({ ...category, Name: categoryEditingName.value });
+    }
+  }
+
+  showCategoryEditModal.value = false;
 }
 
 /**
@@ -315,6 +420,7 @@ async function onDeleteById(id: string) {
 }
 
 onMounted(() => {
+  entityListNavigationStore.ensureInitialRoot();
   processStore.init();
   categoryStore.init();
   artifactStore.init();

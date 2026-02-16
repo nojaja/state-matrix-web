@@ -8,6 +8,17 @@
         @click="emit('move-to-parent')"
       >親カテゴリに移動</button>
 
+      <template v-if="showCreateButtons">
+        <button
+          class="text-sm px-3 py-1 rounded border border-green-300 text-green-700 hover:bg-green-50"
+          @click="emit('create-category', currentCategoryId)"
+        >{{ createCategoryLabel || '新規カテゴリ追加' }}</button>
+        <button
+          class="text-sm px-3 py-1 rounded border border-blue-300 text-blue-700 hover:bg-blue-50"
+          @click="emit('create-entity', currentCategoryId)"
+        >{{ createEntityLabel }}</button>
+      </template>
+
       <div class="text-sm text-gray-600 flex flex-wrap items-center gap-1">
         <template v-for="(crumb, index) in breadcrumbs" :key="crumb.path">
           <span
@@ -19,8 +30,7 @@
             :style="{ cursor: index === breadcrumbs.length - 1 ? 'default' : 'pointer' }"
             @click="onBreadcrumbClick(crumb.categoryId, index === breadcrumbs.length - 1)"
           >
-            <span v-if="crumb.isRootPath" class="material-icons align-middle text-base">folder_special</span>
-            {{ crumb.name }}
+            📁{{ crumb.name }}
           </span>
           <span v-if="index !== breadcrumbs.length - 1" class="breadcrumb-separator mx-1">›</span>
         </template>
@@ -50,8 +60,8 @@
           >
             <template v-if="column.key === conflictDotColumnKey">
               <span class="inline-flex items-center gap-2 text-gray-700">
-                <span class="material-icons text-base">folder_special</span>
-                {{ category.name }}
+                <span class="sr-only">子カテゴリ</span>
+                📁{{ category.name }}
               </span>
             </template>
           </td>
@@ -60,10 +70,23 @@
               @click.stop="emit('enter-category', category.id)"
               class="text-blue-700 hover:text-blue-900 bg-blue-100 px-3 py-1 rounded-full"
             >開く</button>
+            <button
+              @click.stop="emit('rename-category', category.id)"
+              class="text-indigo-700 hover:text-indigo-900 bg-indigo-100 px-3 py-1 rounded-full ml-2"
+            >名称変更</button>
+            <button
+              @click.stop="emit('delete-category', category.id)"
+              class="text-red-700 hover:text-red-900 bg-red-100 px-3 py-1 rounded-full ml-2"
+            >削除</button>
           </td>
         </tr>
 
-        <tr v-for="row in visibleRows" :key="resolveRowId(row)">
+        <tr 
+          v-for="row in visibleRows" 
+          :key="resolveRowId(row)"
+          class="cursor-pointer hover:bg-gray-50"
+          @click="emit('edit', resolveRowId(row))"
+        >
           <td v-for="column in columns" :key="`${resolveRowId(row)}-${column.key}`" :class="column.cellClass || defaultCellClass">
             <template v-if="$slots[`cell-${column.key}`]">
               <slot :name="`cell-${column.key}`" :row="row" :rowId="resolveRowId(row)"></slot>
@@ -148,6 +171,9 @@ const props = withDefaults(defineProps<{
   childCategories?: ChildCategory[];
   breadcrumbs?: BreadcrumbItem[];
   canMoveParent?: boolean;
+  createCategoryLabel?: string;
+  createEntityLabel?: string;
+  showCreateButtons?: boolean;
 }>(), {
   emptyMessage: 'データがありません',
   containerClass: 'bg-white p-6 rounded shadow',
@@ -174,7 +200,10 @@ const props = withDefaults(defineProps<{
    * @returns {Array}
    */
   breadcrumbs: () => [],
-  canMoveParent: false
+  canMoveParent: false,
+  createCategoryLabel: '新規カテゴリ追加',
+  createEntityLabel: '新規追加',
+  showCreateButtons: true
 });
 
 const emit = defineEmits<{
@@ -184,6 +213,10 @@ const emit = defineEmits<{
   'enter-category': [string];
   'move-to-parent': [];
   'navigate-breadcrumb': [string | null];
+  'create-category': [string | null];
+  'create-entity': [string | null];
+  'rename-category': [string];
+  'delete-category': [string];
 }>();
 
 const defaultHeaderClass = 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
