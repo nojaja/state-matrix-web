@@ -1,6 +1,32 @@
 <template>
   <div :class="containerClass">
     <h3 class="text-lg font-bold mb-4">{{ title }}</h3>
+    <div class="mb-4 flex flex-wrap items-center gap-3">
+      <button
+        class="text-sm px-3 py-1 rounded border border-gray-300 text-gray-700 disabled:opacity-50"
+        :disabled="!canMoveParent"
+        @click="emit('move-to-parent')"
+      >親カテゴリに移動</button>
+
+      <div class="text-sm text-gray-600 flex flex-wrap items-center gap-1">
+        <template v-for="(crumb, index) in breadcrumbs" :key="crumb.path">
+          <span
+            class="breadcrumb-item"
+            :class="{
+              current: index === breadcrumbs.length - 1,
+              'root-path': crumb.isRootPath
+            }"
+            :style="{ cursor: index === breadcrumbs.length - 1 ? 'default' : 'pointer' }"
+            @click="onBreadcrumbClick(crumb.categoryId, index === breadcrumbs.length - 1)"
+          >
+            <span v-if="crumb.isRootPath" class="material-icons align-middle text-base">folder_special</span>
+            {{ crumb.name }}
+          </span>
+          <span v-if="index !== breadcrumbs.length - 1" class="breadcrumb-separator mx-1">›</span>
+        </template>
+      </div>
+    </div>
+
     <table :class="tableClass">
       <thead class="bg-gray-50">
         <tr>
@@ -11,11 +37,43 @@
         </tr>
       </thead>
       <tbody class="bg-white divide-y divide-gray-200">
-        <tr v-for="row in rows" :key="resolveRowId(row)">
+        <tr
+          v-for="category in childCategories"
+          :key="`cat-${category.id}`"
+          class="cursor-pointer hover:bg-gray-50"
+          @click="emit('enter-category', category.id)"
+        >
+          <td
+            v-for="column in columns"
+            :key="`cat-${category.id}-${column.key}`"
+            :class="column.cellClass || defaultCellClass"
+          >
+            <template v-if="column.key === conflictDotColumnKey">
+              <span class="inline-flex items-center gap-2 text-gray-700">
+                <span class="material-icons text-base">folder_special</span>
+                {{ category.name }}
+              </span>
+            </template>
+          </td>
+          <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+            <button
+              @click.stop="emit('enter-category', category.id)"
+              class="text-blue-700 hover:text-blue-900 bg-blue-100 px-3 py-1 rounded-full"
+            >開く</button>
+          </td>
+        </tr>
+
+        <tr v-for="row in visibleRows" :key="resolveRowId(row)">
           <td v-for="column in columns" :key="`${resolveRowId(row)}-${column.key}`" :class="column.cellClass || defaultCellClass">
-            <slot :name="`cell-${column.key}`" :row="row" :rowId="resolveRowId(row)">
+            <template v-if="$slots[`cell-${column.key}`]">
+              <slot :name="`cell-${column.key}`" :row="row" :rowId="resolveRowId(row)"></slot>
+            </template>
+            <template v-else-if="$slots.cell">
+              <slot name="cell" :row="row" :rowId="resolveRowId(row)" :columnKey="column.key"></slot>
+            </template>
+            <template v-else>
               {{ resolveCellText(row, column.key) }}
-            </slot>
+            </template>
             <span
               v-if="showConflictDot(resolveRowId(row)) && column.key === conflictDotColumnKey"
               class="ml-2 text-red-600"
@@ -37,7 +95,7 @@
             >削除</button>
           </td>
         </tr>
-        <tr v-if="rows.length === 0">
+        <tr v-if="hasNoListData">
           <td :colspan="columns.length + 1" class="px-6 py-4 text-center text-gray-400">{{ emptyMessage }}</td>
         </tr>
       </tbody>
@@ -46,6 +104,8 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
+
 type EntityListColumn = {
   key: string;
   label: string;
@@ -53,9 +113,24 @@ type EntityListColumn = {
   cellClass?: string;
 };
 
+type ChildCategory = {
+  id: string;
+  name: string;
+  parentId: string | null;
+};
+
+type BreadcrumbItem = {
+  name: string;
+  path: string;
+  categoryId: string | null;
+  isRootPath: boolean;
+};
+
 type EntityListRow = {
   ID?: string;
   id?: string;
+  CategoryID?: string;
+  categoryId?: string;
   [key: string]: unknown;
 };
 
@@ -67,41 +142,100 @@ const props = withDefaults(defineProps<{
   containerClass?: string;
   tableClass?: string;
   conflictDotColumnKey?: string;
-  showConflictDot?: (rowId: string) => boolean;
-  showResolveButton?: (rowId: string) => boolean;
+  showConflictDot?: (...args: [string]) => boolean;
+  showResolveButton?: (...args: [string]) => boolean;
+  currentCategoryId?: string | null;
+  childCategories?: ChildCategory[];
+  breadcrumbs?: BreadcrumbItem[];
+  canMoveParent?: boolean;
 }>(), {
   emptyMessage: 'データがありません',
   containerClass: 'bg-white p-6 rounded shadow',
   tableClass: 'min-w-full divide-y divide-gray-200',
   conflictDotColumnKey: 'name',
-  showConflictDot: () => false,
-  showResolveButton: () => false
+  showConflictDot: (_rowId: string) => false,
+  showResolveButton: (_rowId: string) => false,
+  currentCategoryId: null,
+  childCategories: () => [],
+  breadcrumbs: () => [],
+  canMoveParent: false
 });
 
 const emit = defineEmits<{
-  (e: 'edit', rowId: string): void;
-  (e: 'resolve-conflict', rowId: string): void;
-  (e: 'delete', rowId: string): void;
+  edit: [rowId: string];
+  'resolve-conflict': [rowId: string];
+  delete: [rowId: string];
+  'enter-category': [categoryId: string];
+  'move-to-parent': [];
+  'navigate-breadcrumb': [categoryId: string | null];
 }>();
 
 const defaultHeaderClass = 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
 const actionHeaderClass = 'px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider';
 const defaultCellClass = 'px-6 py-4 whitespace-nowrap text-sm text-gray-500';
 
+const visibleRows = computed(() => {
+  return props.rows.filter(row => resolveRowCategoryId(row) === props.currentCategoryId);
+});
+
+const hasNoListData = computed(() => {
+  return props.childCategories.length === 0 && visibleRows.value.length === 0;
+});
+
+/**
+ * 処理名: 行ID解決
+ * @param row 行データ
+ * @returns 行ID
+ */
 function resolveRowId(row: EntityListRow): string {
   return String(row.ID ?? row.id ?? '');
 }
 
+/**
+ * 処理名: 行カテゴリID解決
+ * @param row 行データ
+ * @returns カテゴリID
+ */
+function resolveRowCategoryId(row: EntityListRow): string | null {
+  return row.CategoryID ?? row.categoryId ?? null;
+}
+
+/**
+ * 処理名: セル文字列解決
+ * @param row 行データ
+ * @param key 列キー
+ * @returns 表示文字列
+ */
 function resolveCellText(row: EntityListRow, key: string): string {
   const value = row[key];
   if (value == null) return '';
   return String(value);
 }
 
+/**
+ * 処理名: パンくずクリック処理
+ * @param categoryId 移動先カテゴリID
+ * @param isLast 最終要素かどうか
+ */
+function onBreadcrumbClick(categoryId: string | null, isLast: boolean): void {
+  if (isLast) return;
+  emit('navigate-breadcrumb', categoryId);
+}
+
+/**
+ * 処理名: 競合解消ボタン表示判定
+ * @param rowId 行ID
+ * @returns 表示可否
+ */
 function showResolveButton(rowId: string): boolean {
   return props.showResolveButton(rowId);
 }
 
+/**
+ * 処理名: 競合ドット表示判定
+ * @param rowId 行ID
+ * @returns 表示可否
+ */
 function showConflictDot(rowId: string): boolean {
   return props.showConflictDot(rowId);
 }

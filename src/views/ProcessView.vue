@@ -1,67 +1,75 @@
 <template>
   <div class="space-y-6">
-    <!-- Form Section -->
-    <div class="bg-white p-6 rounded shadow">
-      <h2 class="text-lg font-bold mb-4">プロセス管理
-        <span v-if="viewTabBadge > 0"
-          class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-600 text-white"
-          :aria-label="`プロセスタブの競合 ${viewTabBadge} 件`" tabindex="0" @click.prevent="openFirstScopeConflict"
-          @keydown.enter.prevent="openFirstScopeConflict" @keydown.space.prevent="openFirstScopeConflict">{{
-          viewTabBadge }}</span>
-      </h2>
-
-      <CategorySelector :path="selectedCategoryPath" @open="openCategorySelector" />
-
-      <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700">工程名称</label>
-        <input v-model="form.Name" type="text" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-          placeholder="プロセス名称" />
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div class="lg:col-span-4">
+        <!-- List Section -->
+        <EntityListSection title="登録済プロセス一覧" :columns="processListColumns" :rows="processListRows"
+          :current-category-id="currentListCategoryId" :child-categories="listChildCategories"
+          :breadcrumbs="listBreadcrumbs" :can-move-parent="canMoveParent"
+          :show-conflict-dot="hasProcessConflict" :show-resolve-button="hasProcessConflict" @edit="onEditById"
+          @resolve-conflict="openCompare" @delete="onDeleteById" @enter-category="enterCategory"
+          @move-to-parent="moveToParentCategory" @navigate-breadcrumb="navigateBreadcrumb">
+          <template #cell-name="{ row }">{{ row.name }}</template>
+        </EntityListSection>
       </div>
 
-      <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700">説明</label>
-        <textarea v-model="form.Description" rows="3"
-          class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" placeholder="プロセスの説明"></textarea>
+      <div class="lg:col-span-8 space-y-4">
+        <!-- Form Section -->
+        <div class="bg-white p-6 rounded shadow">
+          <h2 class="text-lg font-bold mb-4">プロセス管理
+            <span v-if="viewTabBadge > 0"
+              class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-600 text-white"
+              :aria-label="`プロセスタブの競合 ${viewTabBadge} 件`" tabindex="0" @click.prevent="openFirstScopeConflict"
+              @keydown.enter.prevent="openFirstScopeConflict" @keydown.space.prevent="openFirstScopeConflict">{{
+              viewTabBadge }}</span>
+          </h2>
+
+          <CategorySelector :path="selectedCategoryPath" @open="openCategorySelector" />
+
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700">工程名称</label>
+            <input v-model="form.Name" type="text" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+              placeholder="プロセス名称" />
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700">説明</label>
+            <textarea v-model="form.Description" rows="3"
+              class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" placeholder="プロセスの説明"></textarea>
+          </div>
+
+          <InputOutputDefinitionComponent ref="inputOutputDefinitionRef" :selected-process-id="form.Name"
+            :relation-process-id="form.ID" :selected-process-name="form.Name ?? ''"
+            :selected-process-description="form.Description ?? ''" :input-artifacts="inputArtifacts"
+            :output-artifacts="outputArtifacts" :process-items="processItems" :artifact-items="artifactItems"
+            :show-process-setting-button="false" @update:selected-process-id="onSelectedProcessIdUpdated"
+            @update:input-artifacts="onUpdateInputArtifacts" @update:output-artifacts="onUpdateOutputArtifacts"
+            @remove-artifact="onRemoveArtifact" />
+
+          <button @click="onSubmit"
+            class="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600 font-bold disabled:opacity-50"
+            :disabled="!isValid">
+            {{ isEditing ? 'プロセスを更新' : 'プロセスを追加' }}
+          </button>
+          <button v-if="isEditing" @click="resetForm"
+            class="w-full mt-2 bg-gray-300 text-gray-700 py-1 rounded hover:bg-gray-400">
+            キャンセル
+          </button>
+        </div>
+
+        <!-- Inline conflict field resolver for process edits -->
+        <div v-if="isEditing && metadataStore.conflictData?.[projectStore.selectedProject || '']?.[form.ID]"
+          class="mb-4 bg-yellow-50 p-3 rounded">
+          <ConflictFields :keyId="form.ID" />
+        </div>
       </div>
-
-      <InputOutputDefinitionComponent ref="inputOutputDefinitionRef" :selected-process-id="form.Name"
-        :relation-process-id="form.ID" :selected-process-name="form.Name ?? ''"
-        :selected-process-description="form.Description ?? ''" :input-artifacts="inputArtifacts"
-        :output-artifacts="outputArtifacts" :process-items="processItems" :artifact-items="artifactItems"
-        :show-process-setting-button="false" @update:selected-process-id="onSelectedProcessIdUpdated"
-        @update:input-artifacts="onUpdateInputArtifacts" @update:output-artifacts="onUpdateOutputArtifacts"
-        @remove-artifact="onRemoveArtifact" />
-
-      <button @click="onSubmit"
-        class="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600 font-bold disabled:opacity-50"
-        :disabled="!isValid">
-        {{ isEditing ? 'プロセスを更新' : 'プロセスを追加' }}
-      </button>
-      <button v-if="isEditing" @click="resetForm"
-        class="w-full mt-2 bg-gray-300 text-gray-700 py-1 rounded hover:bg-gray-400">
-        キャンセル
-      </button>
     </div>
-
-    <!-- List Section -->
-    <EntityListSection title="登録済プロセス一覧" :columns="processListColumns" :rows="processListRows"
-      :show-conflict-dot="hasProcessConflict" :show-resolve-button="hasProcessConflict" @edit="onEditById"
-      @resolve-conflict="openCompare" @delete="onDeleteById">
-      <template #cell-name="{ row }">{{ row.name }}</template>
-      <template #cell-category="{ row }">{{ row.category }}</template>
-      <template #cell-description="{ row }">{{ row.description }}</template>
-    </EntityListSection>
 
     <CategorySelectorModal v-model="showCategorySelector" @confirm="onCategorySelected" />
     <ModalDialog v-model="showCompareModal" title="競合解消">
       <ThreeWayCompareModal :keyId="compareKey || ''" />
     </ModalDialog>
 
-    <!-- Inline conflict field resolver for process edits -->
-    <div v-if="isEditing && metadataStore.conflictData?.[projectStore.selectedProject || '']?.[form.ID]"
-      class="mb-4 bg-yellow-50 p-3 rounded">
-      <ConflictFields :keyId="form.ID" />
-    </div>
   </div>
 </template>
 
@@ -92,17 +100,50 @@ const artifactStore = useArtifactStore();
 
 const processes = computed(() => processStore.processes);
 const categoryMap = computed(() => categoryStore.getMap);
+const currentListCategoryId = ref<string | null>(null);
 const processListColumns = [
-  { key: 'name', label: '工程名', cellClass: 'px-6 py-4 whitespace-nowrap' },
-  { key: 'category', label: 'カテゴリ', cellClass: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500' },
-  { key: 'description', label: '説明', cellClass: 'px-6 py-4 text-sm text-gray-500' }
+  { key: 'name', label: '工程名', cellClass: 'px-6 py-4 whitespace-nowrap' }
 ];
 const processListRows = computed(() => processes.value.map(proc => ({
   ID: proc.ID,
-  name: proc.Name,
-  category: getCategoryName(proc.CategoryID),
-  description: proc.Description
+  categoryId: proc.CategoryID,
+  name: proc.Name
 })));
+const listChildCategories = computed(() => {
+  return categoryStore.categories
+    .filter(c => c.ParentID === currentListCategoryId.value)
+    .map(c => ({ id: c.ID, name: c.Name, parentId: c.ParentID }));
+});
+const listBreadcrumbs = computed(() => {
+  const crumbs: { name: string; path: string; categoryId: string | null; isRootPath: boolean }[] = [
+    { name: 'ルート', path: '/', categoryId: null, isRootPath: true }
+  ];
+  if (!currentListCategoryId.value) return crumbs;
+
+  const chain: { id: string; name: string }[] = [];
+  let cursorId: string | null = currentListCategoryId.value;
+  while (cursorId) {
+    const node = categoryMap.value[cursorId] as { ID: string; Name: string; ParentID: string | null } | undefined;
+    if (!node) break;
+    chain.unshift({ id: node.ID, name: node.Name });
+    cursorId = node.ParentID;
+  }
+
+  let path = '';
+  for (const node of chain) {
+    path = `${path}/${node.name}`;
+    crumbs.push({
+      name: node.name,
+      path,
+      categoryId: node.id,
+      isRootPath: false
+    });
+  }
+  return crumbs;
+});
+const canMoveParent = computed(() => {
+  return currentListCategoryId.value !== null;
+});
 
 const form = processStore.draft as any;
 
@@ -230,6 +271,30 @@ function hasProcessConflict(id: string): boolean {
 }
 
 /**
+ * 処理名: 子カテゴリへ移動
+ * @param categoryId 移動先カテゴリID
+ */
+function enterCategory(categoryId: string) {
+  currentListCategoryId.value = categoryId;
+}
+
+/**
+ * 処理名: 親カテゴリへ移動
+ */
+function moveToParentCategory() {
+  if (!currentListCategoryId.value) return;
+  currentListCategoryId.value = categoryMap.value[currentListCategoryId.value]?.ParentID ?? null;
+}
+
+/**
+ * 処理名: パンくず移動
+ * @param categoryId パンくずのカテゴリID
+ */
+function navigateBreadcrumb(categoryId: string | null) {
+  currentListCategoryId.value = categoryId;
+}
+
+/**
  * 処理名: ID指定編集
  * @param id プロセスID
  */
@@ -254,17 +319,6 @@ onMounted(() => {
   categoryStore.init();
   artifactStore.init();
 });
-
-/**
- * 処理名: カテゴリ名取得
- * @param id カテゴリ ID
- * @returns string カテゴリ名（未解決時は ID を返す）
- *
- * 処理概要: ID からカテゴリ名を返す（未解決時は ID を返す）
- */
-function getCategoryName(id: string) {
-  return categoryMap.value[id]?.Name || id;
-}
 
 /**
  *

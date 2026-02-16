@@ -18,11 +18,14 @@ async function readProcessViewSource(): Promise<string> {
  * @returns templateブロック
  */
 function extractTemplate(source: string): string {
-  const match = source.match(/<template>([\s\S]*?)<\/template>/);
-  if (!match) {
+  const startTag = '<template>';
+  const endTag = '</template>';
+  const startIndex = source.indexOf(startTag);
+  const endIndex = source.lastIndexOf(endTag);
+  if (startIndex < 0 || endIndex < 0 || endIndex <= startIndex) {
     throw new Error('ProcessView.vue の template ブロックが見つかりません');
   }
-  return match[1];
+  return source.slice(startIndex + startTag.length, endIndex);
 }
 
 describe('ProcessView Form Section IO配置 (v0.0.5)', () => {

@@ -1,55 +1,61 @@
 <template>
   <div class="space-y-6">
-    <!-- Form Section -->
-    <div class="bg-white p-6 rounded shadow">
-      <h2 class="text-lg font-bold mb-4">作成物管理
-        <span v-if="viewTabBadge > 0"
-          class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-600 text-white"
-          :aria-label="`アーティファクトタブの競合 ${viewTabBadge} 件`" tabindex="0" @click.prevent="openFirstScopeConflict"
-          @keydown.enter.prevent="openFirstScopeConflict" @keydown.space.prevent="openFirstScopeConflict">{{
-          viewTabBadge }}</span>
-      </h2>
-
-      <CategorySelector :path="selectedCategoryPath" @open="openCategorySelector" />
-
-      <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700">名称</label>
-        <input v-model="form.Name" type="text" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-          placeholder="作成物名称" />
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div class="lg:col-span-4">
+        <!-- List Section -->
+        <EntityListSection title="登録済作成物一覧" :columns="artifactListColumns" :rows="artifactListRows"
+          :current-category-id="currentListCategoryId" :child-categories="listChildCategories"
+          :breadcrumbs="listBreadcrumbs" :can-move-parent="canMoveParent"
+          :show-conflict-dot="hasArtifactConflict" :show-resolve-button="hasArtifactConflict" @edit="onEditById"
+          @resolve-conflict="openCompare" @delete="onDeleteById" @enter-category="enterCategory"
+          @move-to-parent="moveToParentCategory" @navigate-breadcrumb="navigateBreadcrumb">
+          <template #cell-name="{ row }">{{ row.name }}</template>
+        </EntityListSection>
       </div>
 
-      <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700">内容</label>
-        <textarea v-model="form.Content" rows="2"
-          class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" placeholder="作成物の内容"></textarea>
-      </div>
+      <div class="lg:col-span-8">
+        <!-- Form Section -->
+        <div class="bg-white p-6 rounded shadow">
+          <h2 class="text-lg font-bold mb-4">作成物管理
+            <span v-if="viewTabBadge > 0"
+              class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-600 text-white"
+              :aria-label="`アーティファクトタブの競合 ${viewTabBadge} 件`" tabindex="0" @click.prevent="openFirstScopeConflict"
+              @keydown.enter.prevent="openFirstScopeConflict" @keydown.space.prevent="openFirstScopeConflict">{{
+              viewTabBadge }}</span>
+          </h2>
 
-      <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700">備考</label>
-        <textarea v-model="form.Note" rows="2" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-          placeholder="備考"></textarea>
-      </div>
+          <CategorySelector :path="selectedCategoryPath" @open="openCategorySelector" />
 
-      <button @click="onSubmit"
-        class="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 font-bold disabled:opacity-50"
-        :disabled="!isValid">
-        {{ isEditing ? '作成物を更新' : '作成物を追加' }}
-      </button>
-      <button v-if="isEditing" @click="resetForm"
-        class="w-full mt-2 bg-gray-300 text-gray-700 py-1 rounded hover:bg-gray-400">
-        キャンセル
-      </button>
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700">名称</label>
+            <input v-model="form.Name" type="text" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+              placeholder="作成物名称" />
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700">内容</label>
+            <textarea v-model="form.Content" rows="2"
+              class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" placeholder="作成物の内容"></textarea>
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700">備考</label>
+            <textarea v-model="form.Note" rows="2" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+              placeholder="備考"></textarea>
+          </div>
+
+          <button @click="onSubmit"
+            class="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 font-bold disabled:opacity-50"
+            :disabled="!isValid">
+            {{ isEditing ? '作成物を更新' : '作成物を追加' }}
+          </button>
+          <button v-if="isEditing" @click="resetForm"
+            class="w-full mt-2 bg-gray-300 text-gray-700 py-1 rounded hover:bg-gray-400">
+            キャンセル
+          </button>
+        </div>
+      </div>
     </div>
-
-    <!-- List Section -->
-    <EntityListSection title="登録済作成物一覧" :columns="artifactListColumns" :rows="artifactListRows"
-      :show-conflict-dot="hasArtifactConflict" :show-resolve-button="hasArtifactConflict" @edit="onEditById"
-      @resolve-conflict="openCompare" @delete="onDeleteById">
-      <template #cell-name="{ row }">{{ row.name }}</template>
-      <template #cell-category="{ row }">{{ row.category }}</template>
-      <template #cell-content="{ row }">{{ row.content }}</template>
-      <template #cell-note="{ row }">{{ row.note }}</template>
-    </EntityListSection>
 
     <CategorySelectorModal v-model="showCategorySelector" @confirm="onCategorySelected" />
     <ModalDialog v-model="showCompareModal" title="競合解消">
@@ -82,19 +88,50 @@ const categoryStore = useCategoryStore();
 
 const artifacts = computed(() => artifactStore.artifacts);
 const categoryMap = computed(() => categoryStore.getMap);
+const currentListCategoryId = ref<string | null>(null);
 const artifactListColumns = [
-  { key: 'name', label: '名称', cellClass: 'px-6 py-4 whitespace-nowrap' },
-  { key: 'category', label: 'カテゴリ', cellClass: 'px-6 py-4 whitespace-nowrap text-sm text-gray-500' },
-  { key: 'content', label: '内容', cellClass: 'px-6 py-4 text-sm text-gray-500 truncate max-w-xs' },
-  { key: 'note', label: '備考', cellClass: 'px-6 py-4 text-sm text-gray-500 truncate max-w-xs' }
+  { key: 'name', label: '名称', cellClass: 'px-6 py-4 whitespace-nowrap' }
 ];
 const artifactListRows = computed(() => artifacts.value.map(item => ({
   ID: item.ID,
-  name: item.Name,
-  category: getCategoryName(item.CategoryID),
-  content: item.Content,
-  note: item.Note
-})));
+  categoryId: item.CategoryID,
+  name: item.Name
+}))); 
+const listChildCategories = computed(() => {
+  return categoryStore.categories
+    .filter(c => c.ParentID === currentListCategoryId.value)
+    .map(c => ({ id: c.ID, name: c.Name, parentId: c.ParentID }));
+});
+const listBreadcrumbs = computed(() => {
+  const crumbs: { name: string; path: string; categoryId: string | null; isRootPath: boolean }[] = [
+    { name: 'ルート', path: '/', categoryId: null, isRootPath: true }
+  ];
+  if (!currentListCategoryId.value) return crumbs;
+
+  const chain: { id: string; name: string }[] = [];
+  let cursorId: string | null = currentListCategoryId.value;
+  while (cursorId) {
+    const node = categoryMap.value[cursorId] as { ID: string; Name: string; ParentID: string | null } | undefined;
+    if (!node) break;
+    chain.unshift({ id: node.ID, name: node.Name });
+    cursorId = node.ParentID;
+  }
+
+  let path = '';
+  for (const node of chain) {
+    path = `${path}/${node.name}`;
+    crumbs.push({
+      name: node.name,
+      path,
+      categoryId: node.id,
+      isRootPath: false
+    });
+  }
+  return crumbs;
+});
+const canMoveParent = computed(() => {
+  return currentListCategoryId.value !== null;
+});
 
 const form = artifactStore.draft as any;
 
@@ -182,6 +219,30 @@ function hasArtifactConflict(id: string): boolean {
 }
 
 /**
+ * 処理名: 子カテゴリへ移動
+ * @param categoryId 移動先カテゴリID
+ */
+function enterCategory(categoryId: string) {
+  currentListCategoryId.value = categoryId;
+}
+
+/**
+ * 処理名: 親カテゴリへ移動
+ */
+function moveToParentCategory() {
+  if (!currentListCategoryId.value) return;
+  currentListCategoryId.value = categoryMap.value[currentListCategoryId.value]?.ParentID ?? null;
+}
+
+/**
+ * 処理名: パンくず移動
+ * @param categoryId パンくずのカテゴリID
+ */
+function navigateBreadcrumb(categoryId: string | null) {
+  currentListCategoryId.value = categoryId;
+}
+
+/**
  * 処理名: ID指定編集
  * @param id 作成物ID
  */
@@ -213,9 +274,7 @@ onMounted(() => {
  *
  * 処理概要: ID からカテゴリ名を返す（未解決時は ID を返す）
  */
-function getCategoryName(id: string) {
-  return categoryMap.value[id]?.Name || id;
-}
+// getCategoryName removed: category display column is no longer used
 
 /**
  * 処理名: 編集開始

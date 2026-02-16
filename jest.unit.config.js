@@ -2,9 +2,14 @@ export default {
   testEnvironment: 'node',
   preset: 'ts-jest/presets/default-esm',
   transform: {
-    '^.+\\.ts$': ['ts-jest', { tsconfig: 'tsconfig.json', useESM: true }]
+    '^.+\\.ts$': ['ts-jest', { tsconfig: 'tsconfig.json', useESM: true }],
+    '^.+\\.vue$': ['@vue/vue3-jest']
   },
   moduleFileExtensions: ['ts', 'js', 'json', 'vue'],
+  moduleNameMapper: {
+    "^.+\\.(css|less|scss|sass)$": "identity-obj-proxy",
+    "^@/(.*)$": "<rootDir>/src/$1"
+  },
   testMatch: ['<rootDir>/test/unit/**/*.test.ts'],
   extensionsToTreatAsEsm: ['.ts']
   ,
