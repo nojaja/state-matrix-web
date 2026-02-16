@@ -142,8 +142,8 @@ const props = withDefaults(defineProps<{
   containerClass?: string;
   tableClass?: string;
   conflictDotColumnKey?: string;
-  showConflictDot?: (...args: [string]) => boolean;
-  showResolveButton?: (...args: [string]) => boolean;
+  showConflictDot?: unknown;
+  showResolveButton?: unknown;
   currentCategoryId?: string | null;
   childCategories?: ChildCategory[];
   breadcrumbs?: BreadcrumbItem[];
@@ -153,21 +153,37 @@ const props = withDefaults(defineProps<{
   containerClass: 'bg-white p-6 rounded shadow',
   tableClass: 'min-w-full divide-y divide-gray-200',
   conflictDotColumnKey: 'name',
-  showConflictDot: (_rowId: string) => false,
-  showResolveButton: (_rowId: string) => false,
+  /**
+   * デフォルト: 競合ドットは常に非表示
+   * @returns {boolean}
+   */
+  showConflictDot: () => false,
+  /**
+   * デフォルト: 競合解消ボタンは常に非表示
+   * @returns {boolean}
+   */
+  showResolveButton: () => false,
   currentCategoryId: null,
+  /**
+   * デフォルト: 子カテゴリは空配列
+   * @returns {Array}
+   */
   childCategories: () => [],
+  /**
+   * デフォルト: パンくずは空配列
+   * @returns {Array}
+   */
   breadcrumbs: () => [],
   canMoveParent: false
 });
 
 const emit = defineEmits<{
-  edit: [rowId: string];
-  'resolve-conflict': [rowId: string];
-  delete: [rowId: string];
-  'enter-category': [categoryId: string];
+  edit: [string];
+  'resolve-conflict': [string];
+  delete: [string];
+  'enter-category': [string];
   'move-to-parent': [];
-  'navigate-breadcrumb': [categoryId: string | null];
+  'navigate-breadcrumb': [string | null];
 }>();
 
 const defaultHeaderClass = 'px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider';
@@ -228,7 +244,8 @@ function onBreadcrumbClick(categoryId: string | null, isLast: boolean): void {
  * @returns 表示可否
  */
 function showResolveButton(rowId: string): boolean {
-  return props.showResolveButton(rowId);
+  const fn = props.showResolveButton as any;
+  return typeof fn === 'function' ? fn(rowId) : false;
 }
 
 /**
@@ -237,6 +254,7 @@ function showResolveButton(rowId: string): boolean {
  * @returns 表示可否
  */
 function showConflictDot(rowId: string): boolean {
-  return props.showConflictDot(rowId);
+  const fn = props.showConflictDot as any;
+  return typeof fn === 'function' ? fn(rowId) : false;
 }
 </script>
