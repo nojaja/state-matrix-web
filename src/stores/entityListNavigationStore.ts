@@ -12,6 +12,12 @@ type CategoryForNavigation = {
  *          カテゴリ遷移操作を一元管理する。
  */
 export const useEntityListNavigationStore = defineStore('entityListNavigation', {
+  /**
+   * 処理名: ストア状態初期化
+   *
+   * 処理概要: EntityListナビゲーションの初期状態を返却する。
+    * @returns EntityListナビゲーションの初期状態
+   */
   state: () => ({
     currentCategoryId: null as string | null,
     initialized: false
