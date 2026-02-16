@@ -1,76 +1,60 @@
 <template>
   <div class="space-y-6">
-    <!-- Form Section -->
-    <div class="bg-white p-6 rounded shadow">
-      <h2 class="text-lg font-bold mb-4">作成物管理
-      <span v-if="viewTabBadge > 0" class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-600 text-white" :aria-label="`アーティファクトタブの競合 ${viewTabBadge} 件`" tabindex="0" @click.prevent="openFirstScopeConflict" @keydown.enter.prevent="openFirstScopeConflict" @keydown.space.prevent="openFirstScopeConflict">{{ viewTabBadge }}</span>
-      </h2>
-      
-      <CategorySelector :path="selectedCategoryPath" @open="openCategorySelector" />
-
-      <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700">名称</label>
-        <input v-model="form.Name" type="text" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" placeholder="作成物名称" />
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div class="lg:col-span-4">
+        <!-- List Section -->
+        <EntityListSection title="登録済作成物一覧" :columns="artifactListColumns" :rows="artifactListRows"
+          :current-category-id="currentListCategoryId" :child-categories="listChildCategories"
+          :breadcrumbs="listBreadcrumbs" :can-move-parent="canMoveParent"
+          :show-conflict-dot="hasArtifactConflict" :show-resolve-button="hasArtifactConflict" @edit="onEditById"
+          @resolve-conflict="openCompare" @delete="onDeleteById" @enter-category="enterCategory"
+          @move-to-parent="moveToParentCategory" @navigate-breadcrumb="navigateBreadcrumb">
+          <template #cell-name="{ row }">{{ row.name }}</template>
+        </EntityListSection>
       </div>
 
-      <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700">内容</label>
-        <textarea v-model="form.Content" rows="2" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" placeholder="作成物の内容"></textarea>
+      <div class="lg:col-span-8">
+        <!-- Form Section -->
+        <div class="bg-white p-6 rounded shadow">
+          <h2 class="text-lg font-bold mb-4">作成物管理
+            <span v-if="viewTabBadge > 0"
+              class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-600 text-white"
+              :aria-label="`アーティファクトタブの競合 ${viewTabBadge} 件`" tabindex="0" @click.prevent="openFirstScopeConflict"
+              @keydown.enter.prevent="openFirstScopeConflict" @keydown.space.prevent="openFirstScopeConflict">{{
+              viewTabBadge }}</span>
+          </h2>
+
+          <CategorySelector :path="selectedCategoryPath" @open="openCategorySelector" />
+
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700">名称</label>
+            <input v-model="form.Name" type="text" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+              placeholder="作成物名称" />
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700">内容</label>
+            <textarea v-model="form.Content" rows="2"
+              class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" placeholder="作成物の内容"></textarea>
+          </div>
+
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700">備考</label>
+            <textarea v-model="form.Note" rows="2" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+              placeholder="備考"></textarea>
+          </div>
+
+          <button @click="onSubmit"
+            class="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 font-bold disabled:opacity-50"
+            :disabled="!isValid">
+            {{ isEditing ? '作成物を更新' : '作成物を追加' }}
+          </button>
+          <button v-if="isEditing" @click="resetForm"
+            class="w-full mt-2 bg-gray-300 text-gray-700 py-1 rounded hover:bg-gray-400">
+            キャンセル
+          </button>
+        </div>
       </div>
-
-      <div class="mb-4">
-        <label class="block text-sm font-medium text-gray-700">備考</label>
-        <textarea v-model="form.Note" rows="2" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2" placeholder="備考"></textarea>
-      </div>
-
-      <button 
-        @click="onSubmit"
-        class="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 font-bold disabled:opacity-50"
-        :disabled="!isValid"
-      >
-        {{ isEditing ? '作成物を更新' : '作成物を追加' }}
-      </button>
-       <button 
-        v-if="isEditing" 
-        @click="resetForm"
-        class="w-full mt-2 bg-gray-300 text-gray-700 py-1 rounded hover:bg-gray-400"
-      >
-        キャンセル
-      </button>
-    </div>
-
-    <!-- List Section -->
-    <div class="bg-white p-6 rounded shadow">
-      <h3 class="text-lg font-bold mb-4">登録済作成物一覧</h3>
-      <table class="min-w-full divide-y divide-gray-200">
-        <thead class="bg-gray-50">
-          <tr>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">名称</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">カテゴリ</th>
-            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">内容</th>
-             <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">備考</th>
-            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
-          </tr>
-        </thead>
-        <tbody class="bg-white divide-y divide-gray-200">
-          <tr v-for="item in artifacts" :key="item.ID">
-            <td class="px-6 py-4 whitespace-nowrap">{{ item.Name }} <span v-if="metadataStore.conflictData?.[projectStore.selectedProject || '']?.[item.ID]" class="ml-2 text-red-600">●</span></td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                 {{ getCategoryName(item.CategoryID) }}
-            </td>
-            <td class="px-6 py-4 text-sm text-gray-500 truncate max-w-xs">{{ item.Content }}</td>
-            <td class="px-6 py-4 text-sm text-gray-500 truncate max-w-xs">{{ item.Note }}</td>
-            <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-              <button @click="onEdit(item)" class="text-indigo-600 hover:text-indigo-900 mr-2 bg-indigo-100 px-3 py-1 rounded-full">編集</button>
-              <button v-if="metadataStore.conflictData?.[projectStore.selectedProject || '']?.[item.ID]" @click="openCompare(item.ID)" class="text-yellow-700 mr-2 bg-yellow-100 px-3 py-1 rounded-full">競合解消</button>
-              <button @click="onDelete(item)" class="text-red-600 hover:text-red-900 bg-red-100 px-3 py-1 rounded-full">削除</button>
-            </td>
-          </tr>
-          <tr v-if="artifacts.length === 0">
-              <td colspan="5" class="px-6 py-4 text-center text-gray-400">データがありません</td>
-          </tr>
-        </tbody>
-      </table>
     </div>
 
     <CategorySelectorModal v-model="showCategorySelector" @confirm="onCategorySelected" />
@@ -93,6 +77,7 @@ import { useCategorySelector } from '../composables/useCategorySelector';
 import type { ArtifactType } from '../types/models';
 import CategorySelectorModal from '../components/common/CategorySelectorModal.vue';
 import CategorySelector from '../components/common/CategorySelector.vue';
+import EntityListSection from '../components/common/EntityListSection.vue';
 import ModalDialog from '../components/common/ModalDialog.vue'
 import ThreeWayCompareModal from '../components/common/ThreeWayCompareModal.vue'
 
@@ -103,6 +88,50 @@ const categoryStore = useCategoryStore();
 
 const artifacts = computed(() => artifactStore.artifacts);
 const categoryMap = computed(() => categoryStore.getMap);
+const currentListCategoryId = ref<string | null>(null);
+const artifactListColumns = [
+  { key: 'name', label: '名称', cellClass: 'px-6 py-4 whitespace-nowrap' }
+];
+const artifactListRows = computed(() => artifacts.value.map(item => ({
+  ID: item.ID,
+  categoryId: item.CategoryID,
+  name: item.Name
+}))); 
+const listChildCategories = computed(() => {
+  return categoryStore.categories
+    .filter(c => c.ParentID === currentListCategoryId.value)
+    .map(c => ({ id: c.ID, name: c.Name, parentId: c.ParentID }));
+});
+const listBreadcrumbs = computed(() => {
+  const crumbs: { name: string; path: string; categoryId: string | null; isRootPath: boolean }[] = [
+    { name: 'ルート', path: '/', categoryId: null, isRootPath: true }
+  ];
+  if (!currentListCategoryId.value) return crumbs;
+
+  const chain: { id: string; name: string }[] = [];
+  let cursorId: string | null = currentListCategoryId.value;
+  while (cursorId) {
+    const node = categoryMap.value[cursorId] as { ID: string; Name: string; ParentID: string | null } | undefined;
+    if (!node) break;
+    chain.unshift({ id: node.ID, name: node.Name });
+    cursorId = node.ParentID;
+  }
+
+  let path = '';
+  for (const node of chain) {
+    path = `${path}/${node.name}`;
+    crumbs.push({
+      name: node.name,
+      path,
+      categoryId: node.id,
+      isRootPath: false
+    });
+  }
+  return crumbs;
+});
+const canMoveParent = computed(() => {
+  return currentListCategoryId.value !== null;
+});
 
 const form = artifactStore.draft as any;
 
@@ -142,7 +171,7 @@ const viewTabBadge = computed(() => {
   const proj = projectStore.selectedProject
   if (!proj) return 0
   const map = metadataStore.conflictData[proj] || {}
-  return Object.values(map).filter((c:any) => c && c.path && c.path.startsWith('Artifacts/')).length
+  return Object.values(map).filter((c: any) => c && c.path && c.path.startsWith('Artifacts/')).length
 })
 
 /**
@@ -180,9 +209,62 @@ function openCompare(key: string) {
   showCompareModal.value = true
 }
 
+/**
+ * 処理名: 作成物競合判定
+ * @param id 作成物ID
+ * @returns 競合がある場合 true
+ */
+function hasArtifactConflict(id: string): boolean {
+  return !!metadataStore.conflictData?.[projectStore.selectedProject || '']?.[id];
+}
+
+/**
+ * 処理名: 子カテゴリへ移動
+ * @param categoryId 移動先カテゴリID
+ */
+function enterCategory(categoryId: string) {
+  currentListCategoryId.value = categoryId;
+}
+
+/**
+ * 処理名: 親カテゴリへ移動
+ */
+function moveToParentCategory() {
+  if (!currentListCategoryId.value) return;
+  currentListCategoryId.value = categoryMap.value[currentListCategoryId.value]?.ParentID ?? null;
+}
+
+/**
+ * 処理名: パンくず移動
+ * @param categoryId パンくずのカテゴリID
+ */
+function navigateBreadcrumb(categoryId: string | null) {
+  currentListCategoryId.value = categoryId;
+}
+
+/**
+ * 処理名: ID指定編集
+ * @param id 作成物ID
+ */
+function onEditById(id: string) {
+  const item = artifacts.value.find(artifact => artifact.ID === id);
+  if (!item) return;
+  onEdit(item);
+}
+
+/**
+ * 処理名: ID指定削除
+ * @param id 作成物ID
+ */
+async function onDeleteById(id: string) {
+  const item = artifacts.value.find(artifact => artifact.ID === id);
+  if (!item) return;
+  await onDelete(item);
+}
+
 onMounted(() => {
-    artifactStore.init();
-    categoryStore.init();
+  artifactStore.init();
+  categoryStore.init();
 });
 
 /**
@@ -192,9 +274,7 @@ onMounted(() => {
  *
  * 処理概要: ID からカテゴリ名を返す（未解決時は ID を返す）
  */
-function getCategoryName(id: string) {
-  return categoryMap.value[id]?.Name || id;
-}
+// getCategoryName removed: category display column is no longer used
 
 /**
  * 処理名: 編集開始
@@ -213,9 +293,9 @@ function onEdit(item: ArtifactType) {
  * 処理概要: 確認ダイアログ後に作成物を削除し、フォームをクリアする
  */
 async function onDelete(item: ArtifactType) {
-  if(confirm(`作成物「${item.Name}」を削除しますか？`)) {
+  if (confirm(`作成物「${item.Name}」を削除しますか？`)) {
     await artifactStore.remove(item.ID);
-    if(form.ID === item.ID) resetForm();
+    if (form.ID === item.ID) resetForm();
   }
 }
 
@@ -225,11 +305,11 @@ async function onDelete(item: ArtifactType) {
  * 処理概要: 新規作成または更新を判定して永続化し、フォームをリセットする
  */
 async function onSubmit() {
-  if(!isValid.value) return;
+  if (!isValid.value) return;
   const existingId = form.ID || null
   if (isEditing.value) {
     const target = artifactStore.artifacts.find(i => i.ID === form.ID);
-    if(target) {
+    if (target) {
       await artifactStore.update({
         ...target,
         Name: form.Name,
