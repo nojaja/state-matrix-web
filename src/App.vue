@@ -11,6 +11,14 @@ import { useCausalRelationStore } from './stores/causalRelationStore'
 import { virtualFsManager } from './lib/virtualFsSingleton'
 import type { VirtualFsInstance } from './types/models'
 
+/**
+ * ルーターナビゲーション失敗時の警告ログハンドラ
+ * @param e - キャッチされたエラー
+ */
+function warnRouterNavigation(e: unknown): void {
+  console.warn('[App] router navigation failed:', e)
+}
+
 const projectStore = useProjectStore()
 const metadataStore = useMetadataStore()
 const artifactStore = useArtifactStore()
@@ -184,7 +192,7 @@ function openBadge(kind: string) {
     role: '/role'
   };
   const to = routeForKind[kind] || '/project';
-  router.push({ path: to, query: firstKey ? { conflict: firstKey } : {} }).catch(() => {});
+  router.push({ path: to, query: firstKey ? { conflict: firstKey } : {} }).catch(warnRouterNavigation);
 }
 </script>
 <template>

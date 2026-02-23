@@ -1,4 +1,9 @@
 import { defineStore } from 'pinia';
+import { getActivePinia, setActivePinia, createPinia } from 'pinia'
+
+if (!getActivePinia()) {
+  setActivePinia(createPinia())
+}
 
 type CategoryForNavigation = {
   ID: string;

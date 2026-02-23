@@ -1,6 +1,18 @@
-import { defineStore } from 'pinia'
+import { defineStore, getActivePinia, setActivePinia, createPinia } from 'pinia'
+
+if (!getActivePinia()) {
+  setActivePinia(createPinia())
+}
 import { mergeConflictsMaps } from '../lib/repoSync'
 import type { RepoConfig, ConflictTriple, RepoMetadata } from '../types/models'
+
+/**
+ * OPFS ファイル操作（removeEntry / rename）の無害な失敗を警告ログに出力するハンドラ
+ * @param e - キャッチされたエラー
+ */
+function warnFileOpIgnored(e: unknown): void {
+  console.warn('[metadataStore] file operation ignored:', e)
+}
 import { virtualFsManager } from '../lib/virtualFsSingleton'
 export type { RepoConfig, ConflictTriple, RepoMetadata }
 
@@ -376,14 +388,14 @@ export const useMetadataStore = defineStore('metadata', {
         const writable = await tmp.createWritable()
         await writable.write(JSON.stringify(data, null, 2))
         await writable.close()
-        await proj.removeEntry(filename).catch(() => {})
-        await proj.rename?.(tempName, filename).catch(() => {})
+        await proj.removeEntry(filename).catch(warnFileOpIgnored)
+        await proj.rename?.(tempName, filename).catch(warnFileOpIgnored)
         try {
           const finalHandle = await proj.getFileHandle(filename, { create: true })
           const finalWritable = await finalHandle.createWritable()
           await finalWritable.write(JSON.stringify(data, null, 2))
           await finalWritable.close()
-          await proj.removeEntry(tempName).catch(() => {})
+          await proj.removeEntry(tempName).catch(warnFileOpIgnored)
         } catch (e) {
           console.warn('[metadataStore] saveMetadata final write error:', e)
         }
@@ -425,14 +437,14 @@ export const useMetadataStore = defineStore('metadata', {
         const writable = await tmp.createWritable()
         await writable.write(text)
         await writable.close()
-        await proj.removeEntry(filename).catch(() => {})
-        await proj.rename?.(tempName, filename).catch(() => {})
+        await proj.removeEntry(filename).catch(warnFileOpIgnored)
+        await proj.rename?.(tempName, filename).catch(warnFileOpIgnored)
         try {
           const finalHandle = await proj.getFileHandle(filename, { create: true })
           const finalWritable = await finalHandle.createWritable()
           await finalWritable.write(text)
           await finalWritable.close()
-          await proj.removeEntry(tempName).catch(() => {})
+          await proj.removeEntry(tempName).catch(warnFileOpIgnored)
         } catch (e) {
           console.warn('[metadataStore] saveRawContent final write error:', e)
         }
