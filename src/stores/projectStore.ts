@@ -1,4 +1,11 @@
-﻿import { defineStore } from 'pinia'
+﻿import { defineStore, getActivePinia, setActivePinia, createPinia } from 'pinia'
+
+// Ensure an active Pinia exists when stories/components are collected
+if (!getActivePinia && typeof window === 'undefined') {
+  // defensive: if getActivePinia is not available in this environment, do nothing
+} else if (!getActivePinia()) {
+  setActivePinia(createPinia())
+}
 
 /**
  * 処理名: プロジェクト選択ストア

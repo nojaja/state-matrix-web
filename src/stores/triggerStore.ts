@@ -1,4 +1,8 @@
-import { defineStore } from 'pinia';
+import { defineStore, getActivePinia, setActivePinia, createPinia } from 'pinia';
+
+if (!getActivePinia()) {
+  setActivePinia(createPinia())
+}
 import { createRepositories } from '../repositories';
 import type { ActionTriggerType } from '../types/models';
 import type { VirtualFsInstance } from '../types/models';

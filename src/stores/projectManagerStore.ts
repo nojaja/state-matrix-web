@@ -1,4 +1,8 @@
-import { defineStore } from 'pinia'
+import { defineStore, getActivePinia, setActivePinia, createPinia } from 'pinia'
+
+if (!getActivePinia()) {
+  setActivePinia(createPinia())
+}
 
 /**
  * 処理名: プロジェクト管理ストア
