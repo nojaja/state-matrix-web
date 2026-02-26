@@ -8,6 +8,18 @@ type Fetcher = typeof fetch
 type PushResult = { path: string; ok: boolean; message?: string }
 
 /**
+ * 現在のVFSを安全に取得（未オープン時はnull）
+ * @returns VirtualFSインスタンスまたはnull
+ */
+function tryGetCurrentVfs(): any | null {
+  try {
+    return virtualFsManager.getCurrentVfs()
+  } catch {
+    return null
+  }
+}
+
+/**
  * メタパス判定
  * @param path - ファイルパス
  * @returns 除外対象ならtrue
@@ -268,7 +280,7 @@ export class RepositoryWorkerClient {
     const filtered = paths.filter(p => !isRepoMetaPath(p.path))
 
     try {
-      const vfs: any = virtualFsManager.getCurrentVfs()
+      const vfs: any = tryGetCurrentVfs()
       if (!vfs) throw new Error('VirtualFS is not available')
 
       const results = await writeFilesToVfs(vfs, filtered)

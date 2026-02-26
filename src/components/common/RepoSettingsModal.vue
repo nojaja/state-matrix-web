@@ -6,14 +6,8 @@
         <option value="github">GitHub</option>
         <option value="gitlab">GitLab</option>
       </select>
-      <div v-if="cfg.provider === 'gitlab'" class="mt-2">
-        <label class="block text-sm">Host</label>
-        <input v-model="cfg.host" placeholder="gitlab.com またはセルフホストのホスト名" class="w-full border p-2 rounded" />
-      </div>
-      <label class="block text-sm">Owner</label>
-      <input v-model="cfg.owner" placeholder="owner" class="w-full border p-2 rounded" />
-      <label class="block text-sm">Repository</label>
-      <input v-model="cfg.repository" placeholder="repository" class="w-full border p-2 rounded" />
+      <label class="block text-sm">Repository URL</label>
+      <input v-model="cfg.repositoryUrl" placeholder="https://github.com/owner/repo" class="w-full border p-2 rounded" />
       <label class="block text-sm">Branch</label>
       <input v-model="cfg.branch" placeholder="branch" class="w-full border p-2 rounded" />
 
@@ -58,12 +52,24 @@ import { useProjectStore } from '../../stores/projectStore'
 import { useMetadataStore, type RepoConfig } from '../../stores/metadataStore'
 import { virtualFsManager } from '../../lib/virtualFsSingleton'
 
+/**
+ * 現在のVFSを安全に取得（未オープン時はnull）
+ * @returns VirtualFSインスタンスまたはnull
+ */
+function tryGetCurrentVfs(): any | null {
+  try {
+    return virtualFsManager.getCurrentVfs()
+  } catch {
+    return null
+  }
+}
+
 const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits(['update:modelValue'])
 
 const projectStore = useProjectStore()
 const metadataStore = useMetadataStore()
-const cfg = reactive<RepoConfig>({ provider: 'github', owner: '', repository: '', branch: 'main', token: '' })
+const cfg = reactive<RepoConfig>({ provider: 'github', repositoryUrl: '', branch: 'main', token: '' })
 const showToken = ref(false) // 編集モード
 const consent = ref(false)
 const originalToken = ref('')
@@ -124,18 +130,19 @@ const maskedToken = computed(() => {
 const errors = ref<string[]>([])
 
 const providerValid = computed(() => cfg.provider === 'github' || cfg.provider === 'gitlab')
-const ownerValid = computed(() => !!(cfg.owner && cfg.owner.trim()))
-const repoValid = computed(() => !!(cfg.repository && cfg.repository.trim()))
-const hostValid = computed(() => {
-  if (cfg.provider !== 'gitlab') return true
-  return !!(cfg.host && cfg.host.trim())
+const repoUrlValid = computed(() => {
+  if (!cfg.repositoryUrl || !cfg.repositoryUrl.trim()) return false
+  try {
+    const u = new URL(cfg.repositoryUrl)
+    return u.protocol === 'https:' || u.protocol === 'http:'
+  } catch {
+    return false
+  }
 })
 
 const canSave = computed(() => {
   if (!providerValid.value) return false
-  if (!ownerValid.value) return false
-  if (!repoValid.value) return false
-  if (!hostValid.value) return false
+  if (!repoUrlValid.value) return false
   const tokenTrimmed = !!(cfg.token && cfg.token.trim() !== '')
   const tokenChanged = cfg.token !== originalToken.value
   // 同意は新しくトークンを入力した／編集した場合のみ必要
@@ -152,18 +159,6 @@ function toggleShow() {
 }
 
 /**
- * GitLab/GitHub の adapter ペイロードを構築する
- * @param rc リポジトリ設定
- * @returns adapter ペイロード
- */
-const buildAdapterPayload = (rc: RepoConfig) => {
-  if (rc.provider === 'gitlab') {
-    return { type: 'gitlab', opts: { projectId: `${rc.owner}/${rc.repository}`, host: rc.host || 'gitlab.com', token: rc.token, branch: rc.branch || 'main' } }
-  }
-  return { type: 'github', opts: { owner: rc.owner, repo: rc.repository, token: rc.token, branch: rc.branch || 'main' } }
-}
-
-/**
  * トークンを削除する
  * @returns Promise<void>
  */
@@ -177,12 +172,13 @@ async function deleteToken(): Promise<void> {
     await metadataStore.saveRepoConfig(p, { ...cfg })
     // Ensure adapter is updated on the opened VFS as well (defensive)
     try {
-      const vfs: any = virtualFsManager.getCurrentVfs()
+      const vfs: any = tryGetCurrentVfs()
       if (vfs && typeof vfs.setAdapter === 'function') {
-        await vfs.setAdapter(null, buildAdapterPayload({ ...cfg }))
+        // v0.0.8: setAdapter(type, url, branch?, token?) 方式
+        await vfs.setAdapter(cfg.provider, cfg.repositoryUrl, cfg.branch || 'main', cfg.token || undefined)
       }
-    } catch {
-      // ignore
+    } catch (e) {
+      console.warn('[RepoSettingsModal] deleteToken setAdapter warning:', e)
     }
   }
   alert('トークンを削除しました')
@@ -197,20 +193,20 @@ async function onSave(): Promise<void> {
   if (!p) return alert('プロジェクトを選択してください')
   errors.value = []
   if (!providerValid.value) errors.value.push('provider は github または gitlab である必要があります')
-  if (!ownerValid.value) errors.value.push('owner を入力してください')
-  if (!repoValid.value) errors.value.push('repository を入力してください')
+  if (!repoUrlValid.value) errors.value.push('有効なリポジトリ URL を入力してください（例: https://github.com/owner/repo）')
   if (cfg.token && cfg.token.trim() !== '' && !consent.value) errors.value.push('トークン保存には同意が必要です')
   if (errors.value.length) return
 
   await metadataStore.saveRepoConfig(p, { ...cfg })
   // Defensive: ensure setAdapter runs on current VFS directly if available
-    try {
-      const vfs: any = virtualFsManager.getCurrentVfs()
-      if (vfs && typeof vfs.setAdapter === 'function') {
-        await vfs.setAdapter(null, buildAdapterPayload({ ...cfg }))
-      }
-    } catch {
-    // ignore — metadataStore already attempts to persist
+  try {
+    const vfs: any = tryGetCurrentVfs()
+    if (vfs && typeof vfs.setAdapter === 'function') {
+      // v0.0.8: setAdapter(type, url, branch?, token?) 方式
+      await vfs.setAdapter(cfg.provider, cfg.repositoryUrl, cfg.branch || 'main', cfg.token || undefined)
+    }
+  } catch (e) {
+    console.warn('[RepoSettingsModal] onSave setAdapter warning:', e)
   }
   alert('保存しました')
   visible.value = false

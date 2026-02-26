@@ -34,7 +34,7 @@ describe('metadataStore sync and writeProjectFile coverage', () => {
     jest.spyOn(virtualFsManager, 'getCurrentVfs').mockReturnValue(vfs)
 
     const store = useMetadataStore()
-    store.repoConfigs['P1'] = { provider: 'github', owner: 'o', repository: 'r', branch: 'main' }
+    store.repoConfigs['P1'] = { provider: 'github', repositoryUrl: 'https://github.com/o/r', branch: 'main' }
     const res = await store.syncProject('P1')
     expect(res.needsInit).toBe(true)
     expect(res.pushResults).toBeNull()
@@ -53,7 +53,7 @@ describe('metadataStore sync and writeProjectFile coverage', () => {
     jest.spyOn(virtualFsManager, 'getCurrentVfs').mockReturnValue(vfs)
 
     const store = useMetadataStore()
-    store.repoConfigs['P2'] = { provider: 'github', owner: 'x', repository: 'y', branch: 'main' }
+    store.repoConfigs['P2'] = { provider: 'github', repositoryUrl: 'https://github.com/x/y', branch: 'main' }
     const res = await store.syncProject('P2')
     expect(res.needsInit).toBe(false)
     expect(res.pushResults).not.toBeNull()

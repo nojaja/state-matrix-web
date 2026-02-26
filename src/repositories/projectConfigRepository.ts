@@ -1,7 +1,13 @@
 import type { VirtualFsManager } from '../lib/virtualFsManager';
 import type { VirtualFsInstance } from '../types/models';
 
-type AdapterMeta = { type: string; opts?: Record<string, unknown> };
+type AdapterMeta = {
+  type: string;
+  url?: string;
+  branch?: string;
+  token?: string;
+  opts?: Record<string, unknown>;
+};
 
 /**
  * 処理名: プロジェクト設定リポジトリ
@@ -39,7 +45,7 @@ export class ProjectConfigRepository {
     if (!vfs || !vfs.setAdapter) {
       throw new Error('プロジェクトが未オープンです');
     }
-    // browser-git-ops v0.0.5 expects setAdapter(null, meta)
-    await vfs.setAdapter(null, input);
+    // browser-git-ops v0.0.8: setAdapter(meta) を直接呼び出す
+    await vfs.setAdapter(input);
   }
 }

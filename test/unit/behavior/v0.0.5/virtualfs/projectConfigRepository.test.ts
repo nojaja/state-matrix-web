@@ -42,7 +42,8 @@ describe('ProjectConfigRepository', () => {
 
     await repo.setAdapter(input);
 
-    expect(vfs.setAdapter).toHaveBeenCalledWith(null, input);
+    // v0.0.7: setAdapter(meta) を直接呼び出す
+    expect(vfs.setAdapter).toHaveBeenCalledWith(input);
   });
 
   it('throws when project is not opened', async () => {

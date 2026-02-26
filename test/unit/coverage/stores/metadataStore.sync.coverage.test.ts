@@ -23,7 +23,7 @@ beforeEach(() => {
 
 describe('metadataStore sync/push coverage', () => {
   it('syncProject returns metadata and pushResults when no conflicts', async () => {
-    const cfg = { provider: 'github', owner: 'o', repository: 'r', branch: 'main' }
+    const cfg = { provider: 'github', repositoryUrl: 'https://github.com/o/r', branch: 'main' }
     const vfs: any = {
       getAdapter: jest.fn(async () => ({ type: 'github', opts: { owner: 'o', repo: 'r' } })),
       pull: jest.fn(async () => undefined),
@@ -50,7 +50,7 @@ describe('metadataStore sync/push coverage', () => {
     jest.spyOn(virtualFsManager, 'openProject').mockResolvedValue({ setAdapter: tmpSetAdapter })
 
     const store = useMetadataStore()
-    const cfg = { provider: 'github', owner: 'a', repository: 'b', branch: 'main' }
+    const cfg = { provider: 'github', repositoryUrl: 'https://github.com/a/b', branch: 'main' }
     await store.saveRepoConfig('PP', cfg)
     expect(tmpSetAdapter).toHaveBeenCalled()
   })

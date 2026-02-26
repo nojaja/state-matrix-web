@@ -67,10 +67,8 @@ export const ENTITY_TYPES: EntityType[] = [
 
 export type RepoConfig = {
   provider: 'github' | 'gitlab'
-  owner: string
-  repository: string
+  repositoryUrl: string
   branch: string
-  host?: string
   token?: string
   lastSyncedCommitSha?: string | null
 }
@@ -106,8 +104,12 @@ export interface VirtualFsInstance {
   mkdir?: Function;
   rmdir?: Function;
   stat?: Function;
-  getAdapter?(): Promise<{ type: string; opts?: Record<string, unknown> } | null>;
+  // v0.0.8: setAdapter は meta オブジェクト or (type, url, branch?, token?) のオーバーロード
   setAdapter?: Function;
+  // v0.0.8: getAdapter は新形式 { type, url?, branch?, token?, opts? } を返す
+  getAdapter?(): Promise<{ type: string; url?: string; branch?: string; token?: string; opts?: Record<string, unknown> } | null>;
+  getAdapterInstance?(): Promise<any | null>;
+  getAdapterMeta?(): { type: string; url?: string; branch?: string; token?: string; opts?: Record<string, unknown> } | null;
   // Conflict API: VirtualFS が管理する競合情報の取得と解決
   getConflicts?(): Promise<ConflictTriple[]>;
   resolveConflict?: Function;

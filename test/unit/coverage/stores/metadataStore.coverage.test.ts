@@ -31,8 +31,8 @@ describe('metadataStore coverage additions', () => {
     const cfg = await store.loadRepoConfig('proj1')
     expect(cfg).not.toBeNull()
     expect(cfg.provider).toBe('github')
-    expect(cfg.owner).toBe('o')
-    expect(cfg.repository).toBe('r')
+    // v0.0.7: repositoryUrl ベースの RepoConfig
+    expect(cfg.repositoryUrl).toBe('https://github.com/o/r')
   })
 
   it('saveRepoConfig calls setAdapter on current VFS when available', async () => {
@@ -41,7 +41,7 @@ describe('metadataStore coverage additions', () => {
     jest.spyOn(virtualFsManager, 'getCurrentVfs').mockReturnValue(vfs)
 
     const store = useMetadataStore()
-    const cfg = { provider: 'github', owner: 'x', repository: 'y', branch: 'main' }
+    const cfg = { provider: 'github', repositoryUrl: 'https://github.com/x/y', branch: 'main' }
     await store.saveRepoConfig('proj', cfg)
     expect(setAdapter).toHaveBeenCalled()
   })

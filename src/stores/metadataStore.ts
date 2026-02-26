@@ -92,19 +92,48 @@ async function getAdapterSafely(vfs: any): Promise<any | null> {
 }
 
 /**
+ * AdapterMeta の opts から Repository URL を構築
+ * @param type - アダプタータイプ
+ * @param opts - アダプターオプション
+ * @returns リポジトリ URL
+ */
+function buildUrlFromAdapterOpts(type: string, opts: Record<string, any>): string {
+  if (type === 'github') {
+    const host = opts.host ? opts.host.replace(/\/api\/v3$/, '') : 'https://github.com'
+    return `${host}/${opts.owner}/${opts.repo}`
+  }
+  if (type === 'gitlab') {
+    const host = opts.host || 'https://gitlab.com'
+    return `${host}/${opts.projectId}`
+  }
+  return ''
+}
+
+/**
  * AdapterMetaからRepoConfigを生成
+ * v0.0.8 新形式（url/branch/token がトップレベル）と v0.0.7 旧形式（opts 内）の両方に対応
  * @param adapter - AdapterMeta
  * @returns RepoConfig
  */
 function buildRepoConfigFromAdapter(adapter: any): RepoConfig {
   const opts = (adapter.opts || {}) as Record<string, any>
+
+  // v0.0.8 新形式: adapter.url がトップレベルにある場合はそのまま使用
+  let url = adapter.url || ''
+  if (!url) {
+    // v0.0.7 旧形式からの変換フォールバック
+    url = buildUrlFromAdapterOpts(adapter.type, opts)
+  }
+
+  // v0.0.8: branch/token はトップレベル優先、旧形式の opts からフォールバック
+  const branch = adapter.branch || opts.branch || 'main'
+  const token = adapter.token || opts.token || undefined
+
   return {
     provider: adapter.type === 'gitlab' ? 'gitlab' : 'github',
-    owner: opts.owner || (typeof opts.projectId === 'string' ? (opts.projectId.split('/')?.[0] || '') : ''),
-    repository: opts.repo || (typeof opts.projectId === 'string' ? (opts.projectId.split('/')?.[1] || '') : ''),
-    branch: opts.branch || 'main',
-    host: opts.host || undefined,
-    token: opts.token || undefined,
+    repositoryUrl: url,
+    branch,
+    token,
     lastSyncedCommitSha: null
   }
 }
@@ -138,12 +167,53 @@ function addResolvedPath(resolvedData: Record<string, string[]>, project: string
 }
 
 /**
+ * 現在のVFSを安全に取得（未オープン時はnull）
+ * @returns VirtualFSインスタンスまたはnull
+ */
+function tryGetCurrentVfs(): any | null {
+  try {
+    return virtualFsManager.getCurrentVfs()
+  } catch {
+    return null
+  }
+}
+
+/**
+ * プロジェクトを一時的に開いてsetAdapterを実行する
+ * @param project - プロジェクト名
+ * @param adapterPayload - AdapterMetaペイロード
+ */
+async function setAdapterViaOpenProject(project: string, adapterPayload: any): Promise<void> {
+  let openedHere = false
+  try {
+    const tmpVfs: any = await virtualFsManager.openProject(project)
+    openedHere = true
+    if (tmpVfs && typeof tmpVfs.setAdapter === 'function') {
+      await tmpVfs.setAdapter(adapterPayload)
+    } else {
+      console.warn('VirtualFS.setAdapter is not available on opened VFS')
+    }
+  } catch (e) {
+    console.error('saveRepoConfig failed to set adapter on VirtualFS', e)
+    throw e
+  } finally {
+    if (openedHere) {
+      try {
+        virtualFsManager.closeProject()
+      } catch (e) {
+        console.warn('[metadataStore] saveRepoConfig closeProject error:', e)
+      }
+    }
+  }
+}
+
+/**
  * 現在のVFS取得、無ければ開く
  * @param project - プロジェクト名
  * @returns VFSとopenedHere
  */
 async function getCurrentOrOpenVfs(project: string): Promise<{ vfs: any | null; openedHere: boolean }> {
-  const current = virtualFsManager.getCurrentVfs()
+  const current = tryGetCurrentVfs()
   if (current) return { vfs: current, openedHere: false }
   const opened = await openProjectSafely(project)
   return { vfs: opened, openedHere: !!opened }
@@ -167,15 +237,44 @@ async function getAdapterWithFallback(project: string, vfs: any | null, openedHe
 }
 
 /**
+ * repositoryUrl からパスセグメントを抽出
+ * @param urlStr - リポジトリ URL
+ * @returns パスセグメント配列とオリジン
+ */
+function parseRepoUrl(urlStr: string): { segments: string[]; origin: string } {
+  try {
+    const u = new URL(urlStr)
+    const segments = u.pathname.split('/').filter(Boolean)
+    return { segments, origin: u.origin }
+  } catch {
+    return { segments: [], origin: '' }
+  }
+}
+
+/**
  * RepoConfigからAdapterメタを生成
+ * v0.0.8 新形式: branch/token はトップレベル、opts には host/owner/repo 等のみ
  * @param cfg - リポ設定
  * @returns Adapterメタ
  */
 function buildAdapterPayload(cfg: RepoConfig): any {
-  if (cfg.provider === 'gitlab') {
-    return { type: 'gitlab', opts: { projectId: `${cfg.owner}/${cfg.repository}`, host: cfg.host || 'gitlab.com', token: cfg.token, branch: cfg.branch || 'main' } }
+  const { segments, origin } = parseRepoUrl(cfg.repositoryUrl || '')
+  const type = cfg.provider === 'gitlab' ? 'gitlab' : 'github'
+
+  // v0.0.8: branch/token はトップレベル、opts には host/owner/repo 等のみ
+  if (type === 'gitlab') {
+    const projectId = segments.join('/')
+    const opts: Record<string, any> = { projectId, host: origin || 'https://gitlab.com' }
+    return { type, url: cfg.repositoryUrl, branch: cfg.branch || 'main', token: cfg.token, opts }
   }
-  return { type: 'github', opts: { owner: cfg.owner, repo: cfg.repository, token: cfg.token, branch: cfg.branch || 'main' } }
+  const owner = segments[0] || ''
+  const repo = segments[1] || ''
+  const isCustomHost = origin && origin !== 'https://github.com'
+  const opts: Record<string, any> = { owner, repo }
+  if (isCustomHost) {
+    opts.host = `${origin}/api/v3`
+  }
+  return { type, url: cfg.repositoryUrl, branch: cfg.branch || 'main', token: cfg.token, opts }
 }
 
 /**
@@ -184,26 +283,20 @@ function buildAdapterPayload(cfg: RepoConfig): any {
  * @param payload - Adapterメタ
  */
 async function setAdapterWithFallback(vfs: any, payload: any): Promise<void> {
-  try {
-    await vfs.setAdapter(null, payload)
-  } catch (e) {
-    console.warn('[metadataStore] setAdapter fallback:', e)
-    await vfs.setAdapter(payload)
-  }
+  // browser-git-ops v0.0.8: setAdapter(meta) を直接呼び出す
+  await vfs.setAdapter(payload)
 }
 
 /**
- * Adapterが未設定ならセット
+ * Adapterを常に最新の設定でセット
  * @param vfs - VirtualFS
  * @param cfg - リポ設定
  */
 async function ensureAdapterOnVfs(vfs: any, cfg: RepoConfig): Promise<void> {
+  if (!cfg || typeof vfs.setAdapter !== 'function') return
   try {
-    const adapterOnVfs = typeof vfs.getAdapter === 'function' ? await vfs.getAdapter() : null
-    if ((!adapterOnVfs || !adapterOnVfs.type) && cfg && typeof vfs.setAdapter === 'function') {
-      const adapterPayload = buildAdapterPayload(cfg)
-      await setAdapterWithFallback(vfs, adapterPayload)
-    }
+    const adapterPayload = buildAdapterPayload(cfg)
+    await setAdapterWithFallback(vfs, adapterPayload)
   } catch (e) {
     console.warn('failed to ensure adapter on VFS', e)
   }
@@ -514,57 +607,23 @@ export const useMetadataStore = defineStore('metadata', {
       // Keep in-memory cache
       this.repoConfigs[project] = cfg
       // Persist to VirtualFS adapter instead of OPFS file
-      // Build AdapterMeta from RepoConfig
-      /**
-       * RepoConfigからAdapterMetaを構築
-       * @param rc - リポ設定
-       * @returns アダプターメタ情報
-       */
-      const buildAdapter = (rc: RepoConfig) => {
-        if (rc.provider === 'gitlab') {
-          // For gitlab, use projectId = owner/repository
-          return { type: 'gitlab', opts: { projectId: `${rc.owner}/${rc.repository}`, host: rc.host || 'gitlab.com', token: rc.token, branch: rc.branch || 'main' } }
-        }
-        // default to github
-        return { type: 'github', opts: { owner: rc.owner, repo: rc.repository, token: rc.token, branch: rc.branch || 'main' } }
-      }
-
-      const adapterPayload = buildAdapter(cfg)
+      // Build AdapterMeta from RepoConfig (v0.0.8 url/branch/token トップレベル形式)
+      const adapterPayload = buildAdapterPayload(cfg)
 
       // First try using currently opened VFS
-      try {
-        const vfs: any = virtualFsManager.getCurrentVfs()
-        if (vfs && typeof vfs.setAdapter === 'function') {
-          // browser-git-ops v0.0.5 expects signature setAdapter(null, meta)
-          await vfs.setAdapter(null, adapterPayload)
+      const currentVfs: any = tryGetCurrentVfs()
+      if (currentVfs && typeof currentVfs.setAdapter === 'function') {
+        try {
+          // browser-git-ops v0.0.8: setAdapter(meta) を直接呼び出す
+          await currentVfs.setAdapter(adapterPayload)
           return
+        } catch (e) {
+          console.warn('[metadataStore] current VFS setAdapter error:', e)
         }
-      } catch (e) {
-        console.warn('[metadataStore] current VFS setAdapter error:', e)
       }
 
       // If no current VFS, open the project temporarily to set adapter
-      let openedHere = false
-      try {
-        const tmpVfs: any = await virtualFsManager.openProject(project)
-        openedHere = true
-        if (tmpVfs && typeof tmpVfs.setAdapter === 'function') {
-          await tmpVfs.setAdapter(null, adapterPayload)
-        } else {
-          console.warn('VirtualFS.setAdapter is not available on opened VFS')
-        }
-      } catch (e) {
-        console.error('saveRepoConfig failed to set adapter on VirtualFS', e)
-        throw e
-      } finally {
-        if (openedHere) {
-          try {
-            virtualFsManager.closeProject()
-          } catch (e) {
-            console.warn('[metadataStore] saveRepoConfig closeProject error:', e)
-          }
-        }
-      }
+      await setAdapterViaOpenProject(project, adapterPayload)
     },
 
     /**
@@ -582,7 +641,7 @@ export const useMetadataStore = defineStore('metadata', {
       }
 
       try {
-        const vfs: any = virtualFsManager.getCurrentVfs()
+        const vfs: any = tryGetCurrentVfs()
         if (!vfs || typeof vfs.getConflicts !== 'function') {
           console.info('VirtualFS.getConflicts が利用不可（競合データなし）')
           return {}
@@ -619,7 +678,7 @@ export const useMetadataStore = defineStore('metadata', {
       if (!path) throw new Error('パスが指定されていません')
 
       try {
-        const vfs: any = virtualFsManager.getCurrentVfs()
+        const vfs: any = tryGetCurrentVfs()
         if (!vfs || typeof vfs.resolveConflict !== 'function') {
           throw new Error('VirtualFS.resolveConflict が利用不可')
         }
@@ -719,26 +778,36 @@ export const useMetadataStore = defineStore('metadata', {
       }
 
       // Prefer using VirtualFS APIs for pull/merge/push flows
-      const vfs: any = virtualFsManager.getCurrentVfs()
+      const { vfs, openedHere } = await getCurrentOrOpenVfs(project)
       if (!vfs) throw new Error('VirtualFS is not available')
 
-      await ensureAdapterOnVfs(vfs, cfg)
-      await pullVfsSafe(vfs)
-      const metadata = await buildMetadataFromVfs(vfs)
+      try {
+        await ensureAdapterOnVfs(vfs, cfg)
+        await pullVfsSafe(vfs)
+        const metadata = await buildMetadataFromVfs(vfs)
 
-      const existing = (this.conflictData[project]) ? this.conflictData[project] : await this.loadConflictData(project) || {}
-      const incomingConflicts = await getIncomingConflictsMap(vfs)
+        const existing = (this.conflictData[project]) ? this.conflictData[project] : await this.loadConflictData(project) || {}
+        const incomingConflicts = await getIncomingConflictsMap(vfs)
 
-      const merged = mergeConflictsMaps(existing, incomingConflicts)
-      // Do not persist to OPFS; keep VFS as authority and in-memory map for UI
-      this.conflictData[project] = merged
+        const merged = mergeConflictsMaps(existing, incomingConflicts)
+        // Do not persist to OPFS; keep VFS as authority and in-memory map for UI
+        this.conflictData[project] = merged
 
-      const resolved: string[] = [] // resolved list is managed by VFS/push outcome
-      const conflictsKeys = Object.keys(incomingConflicts || {})
-      const needsInit = needsInitialization(metadata)
-      const pushResults = await pushChangesIfNoConflicts(vfs, conflictsKeys)
+        const resolved: string[] = [] // resolved list is managed by VFS/push outcome
+        const conflictsKeys = Object.keys(incomingConflicts || {})
+        const needsInit = needsInitialization(metadata)
+        const pushResults = await pushChangesIfNoConflicts(vfs, conflictsKeys)
 
-      return { metadata, resolved, conflicts: conflictsKeys, needsInit, pushResults }
+        return { metadata, resolved, conflicts: conflictsKeys, needsInit, pushResults }
+      } finally {
+        if (openedHere) {
+          try {
+            virtualFsManager.closeProject()
+          } catch (e) {
+            console.warn('[metadataStore] syncProject closeProject error:', e)
+          }
+        }
+      }
     }
   }
 })
